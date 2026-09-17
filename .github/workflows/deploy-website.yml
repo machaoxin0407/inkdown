@@ -1,0 +1,68 @@
+name: Deploy download website
+on:
+  push:
+    branches: [main]
+    paths:
+      [
+        'website/**',
+        'scripts/build-website.mjs',
+        'scripts/activate-website.py',
+        '.github/workflows/deploy-website.yml',
+      ]
+  release:
+    types: [published]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: inkdown-website-production
+  cancel-in-progress: false
+jobs:
+  deploy:
+    if: github.event_name != 'release' || (!github.event.release.prerelease && !github.event.release.draft)
+    runs-on: ubuntu-latest
+    environment:
+      name: production
+      url: http://150.158.39.166/inkdown/
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          ref: main
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: '24'
+      - name: Download and verify latest stable release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tests -p test_website_deploy.py
+          mkdir -p artifacts/release-assets
+          gh release view --repo "$GITHUB_REPOSITORY" --json tagName,publishedAt,isDraft,isPrerelease > artifacts/release.json
+          tag=$(node -p 'JSON.parse(require("fs").readFileSync("artifacts/release.json")).tagName')
+          gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir artifacts/release-assets
+          node scripts/build-website.mjs artifacts/release-assets artifacts/release.json artifacts/site
+          tar -czf artifacts/site.tar.gz -C artifacts/site .
+      - name: Upload and activate
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/id_ed25519' EXIT
+          deployment="gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          remote="${DEPLOY_USER}@${DEPLOY_HOST}"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes artifacts/site.tar.gz "$remote:/srv/inkdown/incoming/$deployment.tar.gz"
+          scp -o BatchMode=yes -o StrictHostKeyChecking=yes scripts/activate-website.py "$remote:/srv/inkdown/incoming/$deployment.py"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$remote" "python3 /srv/inkdown/incoming/$deployment.py $deployment /srv/inkdown/incoming/$deployment.tar.gz && rm /srv/inkdown/incoming/$deployment.tar.gz /srv/inkdown/incoming/$deployment.py"
+      - name: Check public site
+        run: |
+          curl --fail --retry 3 http://150.158.39.166/inkdown/release.json
+          curl --fail --retry 3 http://150.158.39.166/inkdown/ -o /dev/null
