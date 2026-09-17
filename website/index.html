@@ -1,0 +1,219 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <meta
+      name="description"
+      content="墨页 Inkdown：轻巧、免费开源的 Windows Markdown 阅读与编辑器。离线阅读，实时预览，公式与图表。"
+    />
+    <meta name="theme-color" content="#f6f7f2" />
+    <title>墨页 Inkdown · 留一点空间，给思考</title>
+    <link rel="icon" href="./assets/mark.svg" type="image/svg+xml" />
+    <link rel="stylesheet" href="./style.css" />
+    <script src="./app.js" defer></script>
+  </head>
+  <body>
+    <a class="skip" href="#main">跳到正文</a>
+    <header class="nav wrap">
+      <a class="brand" href="./" aria-label="墨页首页"
+        ><img src="./assets/mark.svg" width="38" height="38" alt="" /><span
+          >墨页 <small>INKDOWN</small></span
+        ></a
+      >
+      <nav aria-label="主导航">
+        <a href="#features">功能</a><a href="#download">下载</a
+        ><a href="https://github.com/machaoxin0407/inkdown"
+          >GitHub <span aria-hidden="true">↗</span></a
+        >
+      </nav>
+    </header>
+    <main id="main">
+      <section class="hero wrap">
+        <div class="eyebrow"><span class="dot"></span> 本地文档 · 安静阅读 · 自由书写</div>
+        <h1>留一点空间，<br />给<span>思考。</span></h1>
+        <p class="intro">
+          一个轻巧的 Markdown 阅读与编辑空间。<br />打开你的文档，让内容自然呈现。
+        </p>
+        <div class="actions">
+          <a class="button primary" href="#download"
+            >下载 Windows 版 <span aria-hidden="true">↓</span></a
+          ><a class="text-link" href="https://github.com/machaoxin0407/inkdown"
+            >查看开源代码 <span aria-hidden="true">↗</span></a
+          >
+        </div>
+        <p class="fine">Windows 10 / 11 · x64 <span>免费开源 · MIT 许可</span></p>
+        <figure class="product">
+          <div class="window-bar">
+            <span>INKDOWN / READING SPACE</span><span>专注此刻，静心阅读</span>
+          </div>
+          <img
+            src="./assets/reading.png"
+            width="1200"
+            height="820"
+            alt="墨页浅色阅读界面：左侧文件与大纲，右侧清晰的 Markdown 正文"
+            fetchpriority="high"
+          />
+          <figcaption>墨页实际界面 · 让文档回到阅读本身</figcaption>
+        </figure>
+      </section>
+      <section class="principles wrap" aria-label="产品特点">
+        <div>
+          <strong>轻巧</strong>
+          <p>Tauri + 系统 WebView2<br />不额外打包 Chromium</p>
+        </div>
+        <div>
+          <strong>离线</strong>
+          <p>文档与渲染都在本地<br />无需账号，无需云端</p>
+        </div>
+        <div>
+          <strong>开放</strong>
+          <p>MIT 许可，源码公开<br />你的文件，始终属于你</p>
+        </div>
+      </section>
+      <section id="features" class="section wrap">
+        <div class="section-title">
+          <p class="eyebrow">01 / 为内容留白</p>
+          <h2>从阅读，到书写。<br />刚刚好的工具。</h2>
+        </div>
+        <div class="feature-grid">
+          <article>
+            <span class="number">01</span>
+            <h3>读得舒服</h3>
+            <p>舒适的行距与阅读宽度，浅色、深色与跟随系统主题。文档大纲，帮你找到想读的部分。</p>
+          </article>
+          <article>
+            <span class="number">02</span>
+            <h3>写得顺手</h3>
+            <p>
+              源码与实时预览并排显示。滚动编辑区，预览跟随对应内容；搜索替换、撤销与语法高亮随手可用。
+            </p>
+          </article>
+          <article>
+            <span class="number">03</span>
+            <h3>表达更完整</h3>
+            <p>
+              表格、任务列表、代码高亮、KaTeX 公式与 Mermaid
+              图表。常用渲染资源随软件打包，离线也能呈现。
+            </p>
+          </article>
+          <article>
+            <span class="number">04</span>
+            <h3>文件有条理</h3>
+            <p>
+              按需展开的文件夹树，多标签切换，本地图片与文档链接。保存前检查外部修改，遇到冲突由你决定。
+            </p>
+          </article>
+        </div>
+      </section>
+      <section id="download" class="download section">
+        <div class="wrap download-grid">
+          <div>
+            <p class="eyebrow">02 / 开始使用</p>
+            <h2>下一页，<br />从这里开始。</h2>
+            <p>下载、打开，再写下一点想法。</p>
+            <p class="release-line" id="release-status" aria-live="polite">正在读取版本信息…</p>
+            <p>
+              <a
+                class="text-link"
+                id="release-link"
+                href="https://github.com/machaoxin0407/inkdown/releases/latest"
+                >查看版本说明 ↗</a
+              >
+            </p>
+          </div>
+          <div class="download-card">
+            <div class="card-label">WINDOWS · 64 BIT <span id="version">最新正式版</span></div>
+            <h3>墨页 Inkdown</h3>
+            <p>安装版适合日常使用；免安装版解压即可运行。</p>
+            <a
+              class="button primary wide"
+              id="installer"
+              href="https://github.com/machaoxin0407/inkdown/releases/latest"
+              >下载安装版 <span id="installer-size">NSIS</span></a
+            ><a
+              class="button secondary wide"
+              id="portable"
+              href="https://github.com/machaoxin0407/inkdown/releases/latest"
+              >下载免安装版 <span id="portable-size">ZIP</span></a
+            >
+            <div class="download-links">
+              <a id="checksums" href="https://github.com/machaoxin0407/inkdown/releases/latest"
+                >SHA-256 校验</a
+              ><a id="backup" href="https://github.com/machaoxin0407/inkdown/releases/latest"
+                >GitHub 备用下载 ↗</a
+              >
+            </div>
+            <p class="fine">
+              需要 Windows 10 / 11 x64 和 WebView2。<br />当前版本未签名，Windows
+              可能显示未知发布者提示。
+            </p>
+            <noscript><p>JavaScript 未启用，请通过上方 GitHub 入口下载软件。</p></noscript>
+          </div>
+        </div>
+      </section>
+      <section class="section wrap faq">
+        <div>
+          <p class="eyebrow">03 / 你可能想知道</p>
+          <h2>少一点疑问，<br />多一点专注。</h2>
+        </div>
+        <div>
+          <details open>
+            <summary>第一次使用，从哪里开始？</summary>
+            <p>
+              安装后打开墨页，点击「打开文件」选择 Markdown 文档，或直接拖入文档。按 Ctrl+E
+              切换编辑，Ctrl+S 保存。免安装版请先完整解压 ZIP，再运行 Inkdown.exe。
+            </p>
+          </details>
+          <details>
+            <summary>使用时需要联网吗？</summary>
+            <p>
+              日常阅读与编辑不需要联网。公式、图表、字体都随软件打包。若电脑缺少
+              WebView2，首次安装需要联网补齐微软运行时。
+            </p>
+          </details>
+          <details>
+            <summary>文档会上传吗？</summary>
+            <p>
+              不会。墨页不提供云同步，文件保存在你的电脑上。网络图片默认不加载；只有点击外部链接时才会使用系统浏览器打开。
+            </p>
+          </details>
+          <details>
+            <summary>如何核对下载文件？</summary>
+            <p>
+              下载 SHA256SUMS.txt，在 PowerShell 中运行
+              <code>Get-FileHash .\文件名 -Algorithm SHA256</code>，与文件中的对应值比较。也可从
+              GitHub HTTPS 备用入口取得安装包与校验文件。
+            </p>
+          </details>
+          <details>
+            <summary>支持哪些系统和文件？</summary>
+            <p>
+              目前支持 Windows 10/11 x64，读取 UTF-8 编码的 .md、.markdown 和 .mdown 文件。暂不提供
+              macOS、Linux 发行版，也没有自动更新功能。
+            </p>
+          </details>
+        </div>
+      </section>
+      <section class="open-source wrap">
+        <p class="eyebrow">BUILT IN THE OPEN</p>
+        <h2>好工具，一起打磨。</h2>
+        <p>源代码公开，欢迎反馈问题、分享建议，或提交你的改进。</p>
+        <div class="actions">
+          <a class="button secondary" href="https://github.com/machaoxin0407/inkdown"
+            >GitHub 源码 ↗</a
+          ><a class="text-link" href="https://github.com/machaoxin0407/inkdown/issues"
+            >反馈问题 ↗</a
+          >
+        </div>
+      </section>
+    </main>
+    <footer class="wrap">
+      <a class="brand" href="./">墨页 <small>INKDOWN</small></a>
+      <p>给文字留白，给思考空间。</p>
+      <a href="https://github.com/machaoxin0407/inkdown/blob/main/LICENSE"
+        >© 2026 machaoxin0407 · MIT</a
+      >
+    </footer>
+  </body>
+</html>

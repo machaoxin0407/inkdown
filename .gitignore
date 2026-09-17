@@ -1,0 +1,15 @@
+node_modules/
+dist/
+.tools/
+src-tauri/target/
+src-tauri/gen/
+test-results/
+artifacts/
+release/
+*.log
+__pycache__/
+*.pyc
+.env
+.env.*
+*.pem
+*.key
