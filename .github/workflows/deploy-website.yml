@@ -54,8 +54,8 @@ jobs:
           set -euo pipefail
           umask 077
           mkdir -p ~/.ssh
-          printf '%s\n' "$DEPLOY_KEY" > ~/.ssh/id_ed25519
-          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" > ~/.ssh/known_hosts
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
           trap 'rm -f ~/.ssh/id_ed25519' EXIT
           deployment="gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
