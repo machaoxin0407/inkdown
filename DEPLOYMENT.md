@@ -29,7 +29,7 @@ GitHub `production` 环境需要：Secrets `DEPLOY_KEY`、`DEPLOY_KNOWN_HOSTS`�
 ## 本地检查网站
 
 ```powershell
-gh release view --repo machaoxin0407/inkdown --json tagName,publishedAt,isDraft,isPrerelease > artifacts/release.json
+gh release view --repo machaoxin0407/inkdown --json tagName,publishedAt,isDraft,isPrerelease | Set-Content -Encoding utf8 artifacts/release.json
 gh release download v0.1.1 --repo machaoxin0407/inkdown --dir artifacts/release-assets
 node scripts/build-website.mjs artifacts/release-assets artifacts/release.json artifacts/site-preview
 node scripts/check-website.mjs artifacts/site-preview

@@ -6,7 +6,7 @@ if (!assetsArg || !metadataArg)
   throw Error('Usage: node scripts/build-website.mjs ASSETS RELEASE_JSON [OUTPUT]');
 const assetsDir = resolve(assetsArg),
   out = resolve(outArg);
-const release = JSON.parse(await readFile(metadataArg, 'utf8'));
+const release = JSON.parse((await readFile(metadataArg, 'utf8')).replace(/^\uFEFF/, ''));
 const version = release.tagName;
 if (!/^v\d+\.\d+\.\d+$/.test(version) || release.isDraft || release.isPrerelease)
   throw Error('A stable published release is required');
