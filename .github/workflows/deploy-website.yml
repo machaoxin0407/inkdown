@@ -43,7 +43,6 @@ jobs:
           tag=$(node -p 'JSON.parse(require("fs").readFileSync("artifacts/release.json")).tagName')
           gh release download "$tag" --repo "$GITHUB_REPOSITORY" --dir artifacts/release-assets
           node scripts/build-website.mjs artifacts/release-assets artifacts/release.json artifacts/site
-          tar -czf artifacts/site.tar.gz -C artifacts/site .
       - name: Upload and activate
         env:
           DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
@@ -59,9 +58,9 @@ jobs:
           trap 'rm -f ~/.ssh/id_ed25519' EXIT
           deployment="gh-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           remote="${DEPLOY_USER}@${DEPLOY_HOST}"
-          scp -o BatchMode=yes -o StrictHostKeyChecking=yes artifacts/site.tar.gz "$remote:/srv/inkdown/incoming/$deployment.tar.gz"
+          rsync -rcz --link-dest=/srv/inkdown/current -e 'ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=30 -o ServerAliveCountMax=3' artifacts/site/ "$remote:/srv/inkdown/incoming/$deployment/"
           scp -o BatchMode=yes -o StrictHostKeyChecking=yes scripts/activate-website.py "$remote:/srv/inkdown/incoming/$deployment.py"
-          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$remote" "python3 /srv/inkdown/incoming/$deployment.py $deployment /srv/inkdown/incoming/$deployment.tar.gz && rm /srv/inkdown/incoming/$deployment.tar.gz /srv/inkdown/incoming/$deployment.py"
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes "$remote" "tar -czf /srv/inkdown/incoming/$deployment.tar.gz -C /srv/inkdown/incoming/$deployment . && python3 /srv/inkdown/incoming/$deployment.py $deployment /srv/inkdown/incoming/$deployment.tar.gz && rm /srv/inkdown/incoming/$deployment.tar.gz /srv/inkdown/incoming/$deployment.py && rm -r /srv/inkdown/incoming/$deployment"
       - name: Check public site
         run: |
           curl --fail --retry 3 http://150.158.39.166/inkdown/release.json

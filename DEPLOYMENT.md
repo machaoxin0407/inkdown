@@ -10,6 +10,8 @@
 
 工作流从最新正式 GitHub Release 取得文件，验证所有必需资产及 SHA-256 后生成 `release.json`，将静态网站上传至服务器并原子切换。构建步骤只用 Node.js 内置模块，不需要 npm install。网页运行时只读取本站的 release.json，不调用 GitHub API。
 
+上传使用 rsync 校验内容并复用服务器当前版本中未变化的文件，避免每次改网页都重传安装包。服务器需要 Python 3、rsync 和 tar；最终仍验证完整文件清单与 SHA-256，校验通过后才切换 current。
+
 GitHub `production` 环境需要：Secrets `DEPLOY_KEY`、`DEPLOY_KNOWN_HOSTS`；Variables `DEPLOY_HOST`、`DEPLOY_USER`。部署账号没有 sudo；密钥不存入仓库。known_hosts 必须来自经验证的服务器主机密钥，不在每次部署时盲目接受扫描结果。
 
 服务器复用 Caddy；`/inkdown/*` 映射至 `/srv/inkdown/current`，去掉 URL 前缀。`/inkdown` 跳转到末尾带斜线的路径，其他 IP 请求保留原有跳转。配置变更先 `caddy validate` 再 reload。
