@@ -45,3 +45,12 @@ node scripts/check-website.mjs artifacts/site-preview
 - 服务器：`/srv/inkdown/releases/` 保存最近三个成功部署，`current` 指向在线版本。incoming 是传输暂存区；失败上传可由部署账号清理。Caddy 服务日志用 `sudo journalctl -u caddy` 查看。
 - 回滚：SSH 登录部署账号，先执行 `readlink -f /srv/inkdown/current` 与 `ls -lt /srv/inkdown/releases`，选择已验证的旧目录。执行 `ln -s /srv/inkdown/releases/所选目录 /srv/inkdown/rollback-link`，再执行 `mv -Tf /srv/inkdown/rollback-link /srv/inkdown/current`。目录名必须从列表中选择；切换后检查网页和下载。无需重启 Caddy。下一次自动部署会再次切到新版本。
 - 完整性校验测试覆盖篡改文件、路径穿越和保留版本数；上线时额外对真实服务器执行一次失败包测试，确认 current 不变。
+
+## 首次上线验收（2026-09-17）
+
+- 公开仓库及 MIT 许可可匿名访问；GitHub 安装包可匿名下载。
+- 网站在 1440、768、375 像素宽度下无横向溢出，图片、锚点、键盘入口及版本信息失败时的备用下载通过检查；真实 Caddy CSP 下页面无脚本错误。
+- 服务器全部六个发布资产与本地发布文件逐字节及 SHA-256 一致，GitHub 安装包同样一致。
+- [首次成功的自动部署](https://github.com/machaoxin0407/inkdown/actions/runs/35224428380)已将 current 切换到 `gh-35224428380-1`。损坏包随后被拒绝，current 保持不变；保留三个版本和路径穿越拒绝的 Linux 测试通过。
+- 现有域名网站仍返回 200，IP 根地址保留原跳转；`/inkdown` 正确跳转至 `/inkdown/`。
+- 应用 11 项 TypeScript 单元测试通过，类型检查 0 错误、0 警告。软件包使用此前已完成桌面验证的 v0.1.1 二进制。
