@@ -3,6 +3,7 @@ use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
 use std::{collections::HashSet, fs, io::Write, path::{Path, PathBuf}, sync::Mutex};
 use tauri::{Emitter, Manager, State};
+mod pdf;
 
 #[derive(Default)]
 struct Access { documents: Mutex<HashSet<PathBuf>>, roots: Mutex<HashSet<PathBuf>>, pending: Mutex<Vec<String>> }
@@ -141,7 +142,7 @@ pub fn run() {
             *app.state::<Access>().pending.lock().unwrap() = paths;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![read_document, open_workspace, list_directory, save_document, document_fingerprint, read_image, take_open_paths])
+        .invoke_handler(tauri::generate_handler![read_document, open_workspace, list_directory, save_document, document_fingerprint, read_image, take_open_paths, pdf::export_pdf])
         .run(tauri::generate_context!()).expect("无法启动墨页");
 }
 

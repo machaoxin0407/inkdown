@@ -1,4 +1,110 @@
 @import 'highlight.js/styles/github.css';
+.pdf-progress {
+  position: fixed;
+  inset: 0;
+  z-index: 10000;
+  display: grid;
+  place-items: center;
+  background: #fdfcf9e8;
+  color: #23372d;
+  font-size: 16px;
+}
+.pdf-export-root.prose {
+  position: fixed;
+  left: -100000px;
+  top: 0;
+  width: 680px;
+  max-width: none;
+  padding: 0;
+  margin: 0;
+  color: #202820;
+  background: white;
+  color-scheme: light;
+  --text: #202820;
+  --paper: white;
+  --surface: #f5f5f2;
+  --code: #f3f4ee;
+  --border: #d6d9d1;
+  --accent: #3f654c;
+  --muted: #59685e;
+  --subtle: #59685e;
+}
+@media print {
+  @page {
+    size: A4;
+    margin: 15mm;
+  }
+  html,
+  body {
+    height: auto !important;
+    overflow: visible !important;
+    background: white !important;
+    color-scheme: light !important;
+  }
+  body > *:not(.pdf-export-root) {
+    display: none !important;
+  }
+  .pdf-export-root.prose {
+    display: block !important;
+    position: static;
+    width: auto;
+    max-width: none;
+    font-size: 11pt;
+    line-height: 1.7;
+    print-color-adjust: exact;
+    -webkit-print-color-adjust: exact;
+  }
+  .pdf-export-root h1,
+  .pdf-export-root h2,
+  .pdf-export-root h3,
+  .pdf-export-root h4 {
+    break-after: avoid;
+  }
+  .pdf-export-root p {
+    orphans: 3;
+    widows: 3;
+  }
+  .pdf-export-root pre,
+  .pdf-export-root code,
+  .pdf-export-root.prose pre code {
+    white-space: pre-wrap;
+    overflow-wrap: anywhere;
+  }
+  .pdf-export-root pre,
+  .pdf-export-root .code-block,
+  .pdf-export-root table {
+    overflow: visible;
+  }
+  .pdf-export-root table {
+    display: table;
+    width: 100%;
+    table-layout: fixed;
+    font-size: 10pt;
+  }
+  .pdf-export-root th,
+  .pdf-export-root td {
+    overflow-wrap: anywhere;
+  }
+  .pdf-export-root thead {
+    display: table-header-group;
+  }
+  .pdf-export-root tr,
+  .pdf-export-root img,
+  .pdf-export-root .diagram-ready,
+  .pdf-export-root .katex-display {
+    break-inside: avoid;
+  }
+  .pdf-export-root img,
+  .pdf-export-root .diagram-ready svg {
+    max-width: 100% !important;
+    max-height: 240mm;
+    object-fit: contain;
+  }
+  .pdf-export-root .diagram-ready,
+  .pdf-export-root .katex-display {
+    overflow: visible;
+  }
+}
 :root {
   font-family: 'Segoe UI', 'Microsoft YaHei UI', 'Microsoft YaHei', sans-serif;
   color: var(--text);

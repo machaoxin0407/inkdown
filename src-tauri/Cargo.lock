@@ -1725,7 +1725,7 @@ dependencies = [
 
 [[package]]
 name = "inkdown"
-version = "0.1.1"
+version = "0.1.2"
 dependencies = [
  "base64 0.22.1",
  "serde",
@@ -1737,6 +1737,8 @@ dependencies = [
  "tauri-plugin-opener",
  "tauri-plugin-single-instance",
  "tempfile",
+ "webview2-com",
+ "windows",
 ]
 
 [[package]]

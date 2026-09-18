@@ -17,6 +17,13 @@ export const api = {
   chooseFiles: () => open({ multiple: true, filters, title: '打开 Markdown 文件' }),
   chooseFolder: () => open({ directory: true, title: '打开文件夹' }),
   chooseSave: (name: string) => save({ defaultPath: name, filters, title: '保存 Markdown 文件' }),
+  choosePdf: (name: string) =>
+    save({
+      defaultPath: name,
+      filters: [{ name: 'PDF', extensions: ['pdf'] }],
+      title: '导出为 PDF',
+    }),
+  exportPdf: (path: string) => invoke<void>('export_pdf', { path }),
   external: async (url: string) => {
     if (!/^(https?:|mailto:)/i.test(url)) throw new Error('不支持此链接类型');
     if (desktop) await openUrl(url);

@@ -177,6 +177,22 @@
   function fail(e: unknown) {
     error = String(e).replace(/^Error: /, '');
   }
+  let exporting = false;
+  async function exportCurrentPdf() {
+    if (!active) return;
+    if (!desktop) throw new Error('请在桌面版中导出 PDF');
+    const { content, path, name } = active;
+    const output = await api.choosePdf(name.replace(/\.(md|markdown|mdown)$/i, '') + '.pdf');
+    if (!output) return;
+    exporting = true;
+    try {
+      const { exportPdf } = await import('./lib/pdf');
+      await exportPdf(content, path, /\.pdf$/i.test(output) ? output : output + '.pdf');
+      notify('PDF 已导出');
+    } finally {
+      exporting = false;
+    }
+  }
   async function run(action: () => Promise<unknown>) {
     if (busy) return;
     busy = true;
@@ -434,6 +450,11 @@
     }
     if (!event.ctrlKey || event.altKey || dialog || busy) return;
     const key = event.key.toLowerCase();
+    if (key === 'p' && event.shiftKey) {
+      event.preventDefault();
+      run(exportCurrentPdf);
+      return;
+    }
     if (!['o', 's', 'n', 'w', 'e', 'f', 'b'].includes(key)) return;
     event.preventDefault();
     if (key === 'o') run(event.shiftKey ? openFolder : openFiles);
@@ -536,6 +557,9 @@
 </script>
 
 <svelte:window on:keydown={shortcuts} on:focus={checkExternal} />
+{#if exporting}<div class="pdf-progress" role="status" aria-live="polite">
+    正在排版并导出 PDF，请稍候…
+  </div>{/if}
 <div class="app-shell" class:sidebar-hidden={!sidebar} inert={!!dialog}>
   <aside class="sidebar" aria-label="侧边栏">
     <div class="brand">
@@ -676,6 +700,8 @@
                 on:click={() => run(openFolder)}>打开文件夹 <kbd>Ctrl Shift O</kbd></button
               ><button disabled={!active} on:click={() => run(() => saveTab(active!, true))}
                 >另存为 <kbd>Ctrl Shift S</kbd></button
+              ><button disabled={!active || busy} on:click={() => run(exportCurrentPdf)}
+                >导出为 PDF <kbd>Ctrl Shift P</kbd></button
               ><button
                 on:click={() => {
                   cycleTheme();

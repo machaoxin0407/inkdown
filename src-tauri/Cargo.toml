@@ -1,6 +1,6 @@
 [package]
 name = "inkdown"
-version = "0.1.1"
+version = "0.1.2"
 description = "A small, offline Markdown reader and editor"
 edition = "2021"
 
@@ -21,6 +21,10 @@ serde_json = "1"
 sha2 = "0.10"
 base64 = "0.22"
 tempfile = "3"
+
+[target.'cfg(windows)'.dependencies]
+webview2-com = "0.38.2"
+windows = "0.61"
 
 [profile.release]
 panic = "abort"
