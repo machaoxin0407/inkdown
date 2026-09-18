@@ -45,6 +45,8 @@ try {
   page.setDefaultTimeout(30000);
   await page.getByRole('heading', { name: 'PDF 导出验证', exact: true }).waitFor();
   if (!page.url().startsWith('http://tauri.localhost')) throw Error('Expected bundled app');
+  for (let i = 0; i < 10; i++) await page.keyboard.press('Control+=');
+  await expect(page.locator('.zoom-reset')).toHaveText('200%');
   const errors = [];
   page.on('pageerror', (e) => errors.push(String(e)));
   await page.evaluate(() => {

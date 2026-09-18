@@ -14,6 +14,7 @@
 - 打开 `.md`、`.markdown`、`.mdown` 文件，或拖入文件/文件夹。安装版注册文件类型；是否设为默认程序由 Windows 默认应用设置决定。
 - 默认阅读；切换「编辑」进入 CodeMirror 源码和实时预览分栏。拖动中间分隔线调整比例，也可以聚焦分隔线后按左右方向键。
 - 编辑区上下滚动时，预览按源码位置同步滚动；可单独滚动预览，下一次滚动编辑区时恢复联动。公式、图表加载及分栏宽度变化后会重新计算对应位置。
+- 使用顶部 − / + 调整文档缩放（50%–200%），点击百分比恢复 100%。支持 Ctrl+滚轮，自动记住比例；编辑文字与预览一起缩放，PDF 保持固定排版。
 - 点击右上角「更多操作 → 导出为 PDF」，或按 Ctrl+Shift+P，选择保存位置。导出当前文档（包含未保存的编辑），使用 A4 白底排版，保留公式、图表、本地图片与可选择文字；不修改 Markdown 原文件。
 - 文件/大纲侧栏可折叠，文件树按需展开，多标签保留编辑历史和滚动位置。
 - 支持表格、任务列表、代码高亮、KaTeX 数学公式、Mermaid 图表和本地图片。所有渲染资源都在应用内，运行不依赖 CDN。
@@ -24,6 +25,9 @@
 | Ctrl+O / Ctrl+Shift+O | 打开文档 / 打开文件夹 |
 | Ctrl+N | 新建文档 |
 | Ctrl+S / Ctrl+Shift+S | 保存 / 另存为 |
+| Ctrl++ / Ctrl+- | 放大 / 缩小文档 |
+| Ctrl+0 | 恢复 100% 缩放 |
+| Ctrl+滚轮 | 放大 / 缩小文档（正文或编辑区） |
 | Ctrl+E | 切换阅读/编辑 |
 | Ctrl+Shift+P | 导出为 PDF |
 | Ctrl+F | 阅读查找 / 编辑器搜索替换 |
@@ -59,6 +63,7 @@ npm run check
 npm test
 powershell -NoProfile -ExecutionPolicy Bypass -File scripts/desktop.ps1 test
 node scripts/check-ui.mjs       # 需先启动 npm run dev，需本机 Chrome
+node scripts/check-zoom.mjs --native # 桌面缩放、持久化与同步滚动
 node scripts/check-native.mjs   # 需先构建 release；不要同时运行其他墨页实例
 node scripts/check-reading-fixes.mjs          # 浏览器：图表文字与同步滚动
 node scripts/check-reading-fixes.mjs --native # 桌面：图表文字与同步滚动

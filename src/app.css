@@ -474,6 +474,35 @@ a {
   gap: 10px;
   min-width: 0;
 }
+.toolbar-right {
+  flex-shrink: 0;
+}
+.zoom-controls {
+  display: flex;
+  align-items: center;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  height: 32px;
+  flex-shrink: 0;
+}
+.zoom-controls button {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 30px;
+  padding: 0;
+  color: var(--muted);
+  border-radius: 4px;
+}
+.zoom-controls .zoom-reset {
+  width: 46px;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+.zoom-controls button:hover:not(:disabled) {
+  background: var(--hover);
+  color: var(--text);
+}
 .icon-button {
   height: 32px;
   width: 32px;

@@ -6,6 +6,7 @@
   export let content: string;
   export let path = '';
   export let dark = false;
+  export let zoom = 100;
   export let syncEnabled = false;
   export let scroll = 0;
   export let onscroll: (position: number) => void;
@@ -224,7 +225,7 @@
     on:scroll={() => onscroll(host.scrollTop)}
     on:click={click}
   >
-    <article class="prose" bind:this={article}></article>
+    <article class="prose" style={`zoom: ${zoom / 100}`} bind:this={article}></article>
     <div class="document-end"><span></span> 墨页 <span></span></div>
   </div>
 </section>

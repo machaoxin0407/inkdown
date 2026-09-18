@@ -89,6 +89,10 @@ export function createEditor(
   return {
     focus: () => view.focus(),
     find: () => openSearchPanel(view),
+    setZoom(percent: number) {
+      view.dom.style.fontSize = `${(14 * percent) / 100}px`;
+      view.requestMeasure();
+    },
     destroy() {
       states.set(id, { state: view.state, scroll: view.scrollDOM.scrollTop });
       notify = () => {};

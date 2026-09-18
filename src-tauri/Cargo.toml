@@ -1,6 +1,6 @@
 [package]
 name = "inkdown"
-version = "0.1.2"
+version = "0.1.3"
 description = "A small, offline Markdown reader and editor"
 edition = "2021"
 

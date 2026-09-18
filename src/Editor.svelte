@@ -3,10 +3,12 @@
   import type { SourceScroll } from './lib/scroll-sync';
   export let id: string;
   export let content: string;
+  export let zoom = 100;
   export let onchange: (value: string) => void;
   export let onscroll: (position: SourceScroll) => void;
   let host: HTMLDivElement;
   let editor: ReturnType<typeof import('./lib/editor').createEditor> | undefined;
+  $: editor?.setZoom(zoom);
   export function find() {
     editor?.find();
   }

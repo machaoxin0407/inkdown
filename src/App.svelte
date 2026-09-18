@@ -40,6 +40,7 @@
     Monitor,
     X,
     Plus,
+    Minus,
     Save,
     Columns2,
     Clock3,
@@ -59,6 +60,7 @@
   import Preview from './Preview.svelte';
   import Tree from './Tree.svelte';
   import { api, desktop } from './lib/api';
+  import { normalizeZoom, MIN_ZOOM, MAX_ZOOM } from './lib/zoom';
   import type { Tab, Heading, Entry, DocumentData } from './lib/types';
   import { basename, pathKey, localReference, isMarkdown } from './lib/types';
   import welcomeSource from '../examples/欢迎使用.md?raw';
@@ -69,6 +71,7 @@
     theme: 'system' | 'light' | 'dark';
     sidebar: boolean;
     ratio: number;
+    zoom: number;
     recent: string[];
     workspace: string;
     paths: string[];
@@ -78,6 +81,7 @@
     theme: 'system',
     sidebar: true,
     ratio: 48,
+    zoom: 100,
     recent: [],
     workspace: '',
     paths: [],
@@ -91,6 +95,7 @@
         ...value,
         theme: ['system', 'light', 'dark'].includes(value.theme) ? value.theme : 'system',
         ratio: Math.max(28, Math.min(72, Number(value.ratio) || 48)),
+        zoom: normalizeZoom(value.zoom),
         recent: Array.isArray(value.recent)
           ? value.recent.filter((p: unknown) => typeof p === 'string').slice(0, 12)
           : [],
@@ -103,6 +108,7 @@
     }
   }
   const initial = settings();
+  let zoom = initial.zoom;
   let theme = initial.theme,
     sidebar = initial.sidebar,
     ratio = initial.ratio;
@@ -144,6 +150,7 @@
       workspace,
       tabs.map((t) => t.path).filter(Boolean),
       active?.path || '',
+      zoom,
     );
   $: if (desktop && ready)
     getCurrentWindow()
@@ -159,11 +166,12 @@
     workspace: string,
     paths: string[],
     activePath: string,
+    zoom: number,
   ) {
     try {
       localStorage.setItem(
         'inkdown.settings',
-        JSON.stringify({ theme, sidebar, ratio, recent, workspace, paths, activePath }),
+        JSON.stringify({ theme, sidebar, ratio, zoom, recent, workspace, paths, activePath }),
       );
     } catch {
       /* Storage can be disabled by the host. */
@@ -450,6 +458,11 @@
     }
     if (!event.ctrlKey || event.altKey || dialog || busy) return;
     const key = event.key.toLowerCase();
+    if (['+', '=', '-', '_', '0'].includes(key)) {
+      event.preventDefault();
+      zoom = key === '0' ? 100 : normalizeZoom(zoom + (key === '-' || key === '_' ? -10 : 10));
+      return;
+    }
     if (key === 'p' && event.shiftKey) {
       event.preventDefault();
       run(exportCurrentPdf);
@@ -483,6 +496,25 @@
   }
   onMount(() => {
     const cleanup: (() => void)[] = [];
+    let lastWheel = 0;
+    const wheelZoom = (event: WheelEvent) => {
+      if (!event.ctrlKey) return;
+      event.preventDefault();
+      if (
+        busy ||
+        dialog ||
+        !event.deltaY ||
+        !(event.target instanceof Element) ||
+        !event.target.closest('.preview-scroll, .editor-host')
+      )
+        return;
+      const now = performance.now();
+      if (now - lastWheel < 80) return;
+      lastWheel = now;
+      zoom = normalizeZoom(zoom + (event.deltaY < 0 ? 10 : -10));
+    };
+    window.addEventListener('wheel', wheelZoom, { passive: false, capture: true });
+    cleanup.push(() => window.removeEventListener('wheel', wheelZoom, true));
     let disposed = false;
     const media = matchMedia('(prefers-color-scheme: dark)');
     const change = () => (systemDark = media.matches);
@@ -519,6 +551,7 @@
                 workspace,
                 tabs.map((t) => t.path).filter(Boolean),
                 active?.path || '',
+                zoom,
               );
               await getCurrentWindow().destroy();
             });
@@ -663,6 +696,27 @@
         >
       </div>
       <div class="toolbar-right">
+        <div class="zoom-controls" role="group" aria-label="文档缩放">
+          <button
+            aria-label="缩小文档"
+            title="缩小 Ctrl+-"
+            disabled={busy || zoom <= MIN_ZOOM}
+            on:click={() => (zoom = normalizeZoom(zoom - 10))}><Minus size={14} /></button
+          >
+          <button
+            class="zoom-reset"
+            aria-label={`当前缩放 ${zoom}%，点击恢复 100%`}
+            title="恢复 100% Ctrl+0"
+            disabled={busy}
+            on:click={() => (zoom = 100)}>{zoom}%</button
+          >
+          <button
+            aria-label="放大文档"
+            title="放大 Ctrl++"
+            disabled={busy || zoom >= MAX_ZOOM}
+            on:click={() => (zoom = normalizeZoom(zoom + 10))}><Plus size={14} /></button
+          >
+        </div>
         <button
           class="icon-button"
           title="查找 Ctrl+F"
@@ -773,6 +827,7 @@
             {#key active.id + ':' + active.revision}<Editor
                 bind:this={editor}
                 id={active.id}
+                {zoom}
                 content={active.content}
                 onchange={(value) => active && patch(active.id, { content: value })}
                 onscroll={(position) => preview?.syncFromEditor(position)}
@@ -800,6 +855,7 @@
             content={active.content}
             path={active.path}
             {dark}
+            {zoom}
             syncEnabled={active.edit}
             scroll={active.scroll}
             onscroll={(position) => {
