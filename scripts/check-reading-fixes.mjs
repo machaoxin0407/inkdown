@@ -32,6 +32,7 @@ try {
         stdio: 'ignore',
         env: {
           ...process.env,
+          INKDOWN_DATA_DIR: resolve('artifacts/reading-data-' + Date.now()),
           WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9223',
           WEBVIEW2_USER_DATA_FOLDER: resolve('artifacts/fixes-profile-' + Date.now()),
         },

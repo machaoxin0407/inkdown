@@ -4,6 +4,8 @@
   export let id: string;
   export let content: string;
   export let zoom = 100;
+  export let position: { cursor: number; editorLine: number } | undefined = undefined;
+  export let onposition: (cursor: number, line: number) => void = () => {};
   export let onchange: (value: string) => void;
   export let onscroll: (position: SourceScroll) => void;
   let host: HTMLDivElement;
@@ -16,7 +18,7 @@
     let cancelled = false;
     import('./lib/editor').then(({ createEditor }) => {
       if (cancelled) return;
-      editor = createEditor(host, id, content, onchange, onscroll);
+      editor = createEditor(host, id, content, onchange, onscroll, position, onposition);
       editor.focus();
     });
     return () => {

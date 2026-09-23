@@ -1334,3 +1334,136 @@ a {
     scroll-behavior: auto !important;
   }
 }
+.feature-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 60;
+  background: #0005;
+  display: flex;
+  align-items: flex-start;
+  justify-content: center;
+  padding: 72px 20px 24px;
+}
+.feature-dialog {
+  width: min(640px, 100%);
+  max-height: calc(100vh - 100px);
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  padding: 22px;
+  background: var(--paper);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  box-shadow: 0 16px 64px #0003;
+}
+.feature-dialog header,
+.feature-dialog footer,
+.feature-note {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+.feature-dialog h2 {
+  font-size: 18px;
+  margin: 0;
+}
+.feature-dialog button {
+  padding: 7px 10px;
+  border-radius: 6px;
+}
+.feature-dialog footer {
+  justify-content: flex-end;
+}
+.feature-note {
+  font-size: 12px;
+  color: var(--muted);
+  margin: 0;
+}
+.quick-input {
+  padding: 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--surface);
+  color: var(--text);
+  font: inherit;
+}
+.quick-results,
+.draft-list {
+  overflow: auto;
+  min-height: 80px;
+}
+.quick-result {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  width: 100%;
+  text-align: left;
+  margin-bottom: 4px;
+}
+.quick-result span,
+.draft-row small {
+  font-size: 12px;
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+.quick-result.highlighted {
+  background: var(--hover);
+  outline: 1px solid var(--border);
+}
+.draft-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.draft-row span {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+.prose pre {
+  position: relative;
+}
+.copy-code {
+  position: absolute;
+  right: 8px;
+  top: 6px;
+  font: 12px/1.4 var(--font-sans, sans-serif);
+  color: var(--muted);
+  background: var(--paper);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  padding: 4px 8px;
+  user-select: none;
+}
+.prose pre:has(.copy-code) {
+  padding-top: 38px;
+}
+@media print {
+  .copy-code,
+  .feature-overlay {
+    display: none !important;
+  }
+}
+
+.quick-result {
+  align-items: flex-start;
+  white-space: normal;
+  overflow: hidden;
+}
+.quick-result strong,
+.quick-result span {
+  min-width: 0;
+  width: 100%;
+  overflow-wrap: anywhere;
+}
+.quick-results {
+  overflow-x: hidden;
+}
+.draft-row > span {
+  min-width: 0;
+  flex: 1;
+}

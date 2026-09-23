@@ -1,6 +1,6 @@
 // End-to-end test against the actual release WebView. Native picker responses
 // are injected; all filesystem reads/writes and rendering use the real backend.
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile, readFile, chmod, stat } from 'node:fs/promises';
 import { resolve, join } from 'node:path';
 import { spawn, execFileSync } from 'node:child_process';
@@ -15,6 +15,7 @@ const child = spawn(binary, [file], {
   windowsHide: true,
   env: {
     ...process.env,
+    INKDOWN_DATA_DIR: join(root, 'app-data'),
     WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9223',
     WEBVIEW2_USER_DATA_FOLDER: resolve('artifacts/native-profile-' + Date.now()),
   },
@@ -104,6 +105,7 @@ async function edit(text) {
   await page.locator('.cm-content').fill(text);
 }
 async function open(path) {
+  await expect(page.locator('.statusbar')).not.toContainText('正在处理');
   await picker([path]);
   await page.keyboard.press('Control+o');
   await page.getByRole('tab', { name: path.split(/[\\/]/).pop(), exact: true }).waitFor();
@@ -229,6 +231,7 @@ await check('window close preserves unsaved edits on cancel', async () => {
     throw Error('Lost changes on close');
   await page.getByRole('button', { name: '关闭 未命名.md', exact: true }).click();
   await page.getByRole('button', { name: '放弃修改', exact: true }).click();
+  await page.getByRole('tab', { name: '未命名.md', exact: true }).waitFor({ state: 'detached' });
 });
 let largeMs = 0;
 await check('1 MB document', async () => {

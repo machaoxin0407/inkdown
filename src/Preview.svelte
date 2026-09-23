@@ -1,14 +1,62 @@
 <script lang="ts">
   import { onDestroy, onMount } from 'svelte';
+  import { api } from './lib/api';
   import { parse, enhance } from './lib/render';
   import type { Heading } from './lib/types';
-  import { previewScrollTop, type SourceScroll, type ScrollAnchor } from './lib/scroll-sync';
+  import {
+    previewScrollTop,
+    sourcePosition,
+    type SourceScroll,
+    type ScrollAnchor,
+  } from './lib/scroll-sync';
   export let content: string;
   export let path = '';
   export let dark = false;
   export let zoom = 100;
   export let syncEnabled = false;
   export let scroll = 0;
+  export let location: SourceScroll | undefined = undefined;
+  export let onposition: (position: SourceScroll) => void = () => {};
+  export let onerror: (error: unknown) => void = () => {};
+  let restoring = true;
+  let pendingAnchor = '';
+  let anchorLocked = false;
+  const initialLocation = location;
+  function userScroll() {
+    restoring = false;
+  }
+  function reportScroll() {
+    onscroll(host.scrollTop);
+    if (!restoring && renderedSource === content)
+      onposition(
+        sourcePosition(host.scrollTop, scrollAnchors, host.scrollHeight - host.clientHeight),
+      );
+  }
+  function addCopyButtons() {
+    for (const pre of article.querySelectorAll('pre')) {
+      const code = pre.querySelector('code');
+      if (!code || pre.closest('.diagram-source')) continue;
+      const text = code.textContent || '';
+      const button = document.createElement('button');
+      button.className = 'copy-code';
+      button.type = 'button';
+      button.textContent = '复制';
+      button.setAttribute('aria-label', '复制代码');
+      button.addEventListener('click', async () => {
+        try {
+          await api.copy(text);
+          button.textContent = '已复制';
+          setTimeout(() => {
+            button.textContent = '复制';
+          }, 1800);
+        } catch (e) {
+          button.textContent = '复制失败';
+          onerror('无法写入剪贴板，请重试：' + String(e));
+        }
+      });
+      pre.append(button);
+    }
+  }
   export let onscroll: (position: number) => void;
   export let onheadings: (headings: Heading[]) => void;
   export let onlink: (href: string) => void;
@@ -29,7 +77,8 @@
   let scrollAnchors: ScrollAnchor[] = [];
   let layoutFrame = 0;
   export function syncFromEditor(position: SourceScroll) {
-    if (!syncEnabled) return;
+    if (!syncEnabled || anchorLocked) return;
+    restoring = false;
     editorPosition = position;
     applyEditorScroll();
   }
@@ -56,9 +105,21 @@
       top: article.getBoundingClientRect().bottom - origin,
     });
     scrollAnchors = points;
+    if (restoring && initialLocation && !syncEnabled)
+      host.scrollTop = previewScrollTop(
+        initialLocation,
+        scrollAnchors,
+        host.scrollHeight - host.clientHeight,
+      );
     applyEditorScroll();
   }
   onMount(() => {
+    const resumeSync = (event: Event) => {
+      if (event.target instanceof Element && event.target.closest('.editor-host'))
+        anchorLocked = false;
+    };
+    for (const type of ['wheel', 'pointerdown', 'keydown'])
+      window.addEventListener(type, resumeSync, true);
     const observer = new ResizeObserver(() => {
       cancelAnimationFrame(layoutFrame);
       layoutFrame = requestAnimationFrame(refreshAnchors);
@@ -66,6 +127,8 @@
     observer.observe(article);
     observer.observe(host);
     return () => {
+      for (const type of ['wheel', 'pointerdown', 'keydown'])
+        window.removeEventListener(type, resumeSync, true);
       observer.disconnect();
       cancelAnimationFrame(layoutFrame);
     };
@@ -77,6 +140,9 @@
     target.innerHTML = html;
   }
   export function jump(id: string) {
+    anchorLocked = true;
+    editorPosition = null;
+    restoring = false;
     article?.querySelector(`[id="${CSS.escape(id)}"]`)?.scrollIntoView({ block: 'start' });
   }
   export function find() {
@@ -84,12 +150,17 @@
     setTimeout(() => findInput?.focus());
   }
   export function anchor(name: string) {
+    anchorLocked = true;
+    editorPosition = null;
+    restoring = false;
+    pendingAnchor = name;
     const heading = [...article.querySelectorAll<HTMLElement>('h1,h2,h3,h4,h5,h6')].find(
       (el) =>
         el.id === name ||
         el.textContent?.trim().replace(/\s+/g, '-').toLowerCase() === name.toLowerCase(),
     );
     heading?.scrollIntoView({ block: 'start' });
+    if (heading && renderedSource === content) pendingAnchor = '';
   }
   function clearMarks() {
     article
@@ -100,11 +171,12 @@
     matchIndex = -1;
   }
   function searchText() {
+    restoring = false;
     clearMarks();
     if (!findText || !article) return;
     const walker = document.createTreeWalker(article, NodeFilter.SHOW_TEXT, {
       acceptNode: (node) =>
-        node.parentElement?.closest('svg,math,.katex,.diagram-source')
+        node.parentElement?.closest('svg,math,.katex,.diagram-source,.copy-code')
           ? NodeFilter.FILTER_REJECT
           : NodeFilter.FILTER_ACCEPT,
     });
@@ -154,6 +226,7 @@
           if (token !== generation || !article) return;
           const position = initial ? scroll : host.scrollTop;
           installMarkup(article, parsed.html);
+          addCopyButtons();
           renderedSource = source;
           onheadings(parsed.headings);
           host.scrollTop = position;
@@ -164,6 +237,7 @@
             if (findText) searchText();
             if (position && host.scrollTop === 0) host.scrollTop = position;
             refreshAnchors();
+            if (pendingAnchor) anchor(pendingAnchor);
           }
         } catch (e) {
           if (token === generation) error = String(e);
@@ -222,7 +296,10 @@
   <div
     class="preview-scroll"
     bind:this={host}
-    on:scroll={() => onscroll(host.scrollTop)}
+    on:wheel={userScroll}
+    on:pointerdown={userScroll}
+    on:keydown={userScroll}
+    on:scroll={reportScroll}
     on:click={click}
   >
     <article class="prose" style={`zoom: ${zoom / 100}`} bind:this={article}></article>

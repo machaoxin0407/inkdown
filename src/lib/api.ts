@@ -5,6 +5,17 @@ import type { DocumentData, Entry } from './types';
 export const desktop = isTauri();
 const filters = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown'] }];
 export const api = {
+  drafts: () =>
+    invoke<{ drafts: import('./local-state').Draft[]; warnings: string[] }>('list_drafts'),
+  writeDraft: (draft: import('./local-state').Draft) => invoke<void>('write_draft', { draft }),
+  deleteDraft: (id: string) => invoke<void>('delete_draft', { id }),
+  positions: () => invoke<import('./local-state').Position[]>('read_positions'),
+  writePosition: (position: import('./local-state').Position) =>
+    invoke<void>('write_position', { position }),
+  index: (path: string) =>
+    invoke<{ paths: string[]; skipped: number; cancelled: boolean }>('index_workspace', { path }),
+  cancelIndex: () => invoke<void>('cancel_index'),
+  copy: (text: string) => navigator.clipboard.writeText(text),
   read: (path: string) => invoke<DocumentData>('read_document', { path }),
   workspace: (path: string) => invoke<string>('open_workspace', { path }),
   list: (path: string) => invoke<Entry[]>('list_directory', { path }),

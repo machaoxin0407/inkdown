@@ -27,7 +27,7 @@
 </script>
 
 <script lang="ts">
-  import { onMount } from 'svelte';
+  import { onMount, tick } from 'svelte';
   import {
     BookOpen,
     PanelLeft,
@@ -59,6 +59,15 @@
   import Editor from './Editor.svelte';
   import Preview from './Preview.svelte';
   import Tree from './Tree.svelte';
+  import QuickOpen from './QuickOpen.svelte';
+  import DraftRecovery from './DraftRecovery.svelte';
+  import {
+    Backups,
+    positionOf,
+    type Draft,
+    type Position,
+    type QuickItem,
+  } from './lib/local-state';
   import { api, desktop } from './lib/api';
   import { normalizeZoom, MIN_ZOOM, MAX_ZOOM } from './lib/zoom';
   import type { Tab, Heading, Entry, DocumentData } from './lib/types';
@@ -137,6 +146,79 @@
   } | null = null;
   let toastTimer: ReturnType<typeof setTimeout>;
   let active: Tab | undefined;
+  let quickOpen = false,
+    recoveryOpen = false,
+    drafts: Draft[] = [];
+  const backups = new Backups(api, (e) => fail('本机备份或位置记录失败：' + String(e)));
+  $: if (ready && desktop) for (const tab of tabs) backups.track(tab);
+  function rememberPosition(tab: Tab, change: Partial<Position> = {}) {
+    tab.position = { ...positionOf(tab), ...change };
+    if (desktop && ready) backups.remember(tab);
+  }
+  async function showRecovery() {
+    quickOpen = false;
+    menu = false;
+    if (!desktop) {
+      notify('请在桌面版中恢复草稿');
+      return;
+    }
+    const result = await api.drafts();
+    drafts = result.drafts.filter((d) => !tabs.some((t) => t.id === d.id));
+    if (result.warnings.length) fail(result.warnings.join('；'));
+    recoveryOpen = true;
+  }
+  async function restoreDrafts(ids: string[]) {
+    for (const draft of drafts.filter((d) => ids.includes(d.id))) {
+      let document: DocumentData | undefined;
+      if (draft.path)
+        try {
+          document = await api.read(draft.path);
+        } catch {}
+      const existing = document && tabs.find((t) => pathKey(t.path) === pathKey(document!.path));
+      if (existing && existing.content !== existing.saved) document = undefined;
+      else if (existing) tabs = tabs.filter((t) => t.id !== existing.id);
+      const path = document?.path || '';
+      const tab: Tab = {
+        id: draft.id,
+        name: draft.name,
+        path,
+        content: draft.content,
+        saved: document?.content === draft.content ? '\0' : (document?.content ?? '\0'),
+        fingerprint: draft.fingerprint,
+        bom: draft.bom,
+        newline: draft.newline === 'CRLF' ? 'CRLF' : 'LF',
+        scroll: 0,
+        edit: draft.position.edit,
+        external: !!document && document.fingerprint !== draft.fingerprint,
+        revision: 0,
+        position: { ...draft.position, path },
+      };
+      tabs = [...tabs, tab];
+      activeId = tab.id;
+    }
+    drafts = drafts.filter((d) => !ids.includes(d.id));
+    recoveryOpen = false;
+    notify('草稿已恢复，原文件尚未修改');
+  }
+  async function discardDrafts(ids: string[]) {
+    for (const id of ids) await backups.clear(id);
+    drafts = drafts.filter((d) => !ids.includes(d.id));
+    if (!drafts.length) recoveryOpen = false;
+  }
+  function showQuick() {
+    if (busy || dialog || recoveryOpen) return;
+    menu = false;
+    quickOpen = true;
+  }
+  async function openQuick(item: QuickItem) {
+    quickOpen = false;
+    if (item.id) {
+      activeId = item.id;
+      return;
+    }
+    await openPath(item.path);
+  }
+
   $: active = tabs.find((t) => t.id === activeId);
   $: dark = theme === 'dark' || (theme === 'system' && systemDark);
   $: if (typeof document !== 'undefined')
@@ -269,6 +351,11 @@
     recent = [path, ...recent.filter((p) => pathKey(p) !== pathKey(path))].slice(0, 12);
   }
   async function openPath(path: string) {
+    const opened = tabs.find((t) => t.path && pathKey(t.path) === pathKey(path));
+    if (opened) {
+      activeId = opened.id;
+      return;
+    }
     const document = await api.read(path);
     const existing = tabs.find((t) => pathKey(t.path) === pathKey(document.path));
     if (existing) {
@@ -284,7 +371,8 @@
         name: basename(document.path),
         saved: document.content,
         scroll: 0,
-        edit: false,
+        position: backups.positions.get(pathKey(document.path)),
+        edit: backups.positions.get(pathKey(document.path))?.edit ?? false,
         external: false,
         revision: 0,
       },
@@ -314,6 +402,8 @@
   async function closeTab(id: string) {
     const tab = tabs.find((t) => t.id === id);
     if (!tab || !(await confirmTab(tab))) return;
+    rememberPosition(tab);
+    if (desktop) await backups.clear(tab.id);
     const index = tabs.indexOf(tab);
     tabs = tabs.filter((t) => t.id !== id);
     if (activeId === id) activeId = tabs[Math.min(index, tabs.length - 1)]?.id || '';
@@ -327,6 +417,12 @@
     const root = await api.workspace(path);
     const listed = await api.list(root);
     for (const tab of tabs) if (!(await confirmTab(tab))) return;
+    for (const tab of tabs) {
+      rememberPosition(tab);
+      if (desktop) await backups.clear(tab.id);
+    }
+    if (desktop) await api.cancelIndex();
+    quickOpen = false;
     workspace = root;
     entries = listed;
     tabs = [];
@@ -391,6 +487,9 @@
           content: current?.content ?? tab.content,
           external: false,
         });
+        const savedTab = tabs.find((t) => t.id === tab.id);
+        if (savedTab) rememberPosition(savedTab);
+        if (savedTab?.content === savedTab?.saved) await backups.clear(tab.id);
         remember(document.path);
         notify('已保存到本地');
         return true;
@@ -438,10 +537,17 @@
     if (!isMarkdown(path)) throw new Error('仅支持打开 Markdown 文档链接');
     await openPath(path);
     const hash = href.split('#')[1];
-    if (hash) setTimeout(() => preview?.anchor(decodeURIComponent(hash)), 400);
+    if (hash) {
+      await tick();
+      preview?.anchor(decodeURIComponent(hash));
+    }
   }
   function toggleEdit() {
-    if (active) patch(active.id, { edit: !active.edit });
+    if (active) {
+      patch(active.id, { edit: !active.edit });
+      const tab = tabs.find((t) => t.id === active!.id);
+      if (tab) rememberPosition(tab);
+    }
   }
   function find() {
     if (active?.edit) editor?.find();
@@ -451,6 +557,7 @@
     theme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
   }
   function shortcuts(event: KeyboardEvent) {
+    if (quickOpen || recoveryOpen) return;
     if (event.key === 'Escape') {
       menu = false;
       if (dialog) answer('cancel');
@@ -461,6 +568,11 @@
     if (['+', '=', '-', '_', '0'].includes(key)) {
       event.preventDefault();
       zoom = key === '0' ? 100 : normalizeZoom(zoom + (key === '-' || key === '_' ? -10 : 10));
+      return;
+    }
+    if (key === 'p' && !event.shiftKey) {
+      event.preventDefault();
+      showQuick();
       return;
     }
     if (key === 'p' && event.shiftKey) {
@@ -540,7 +652,7 @@
         addCleanup(
           await getCurrentWindow().onCloseRequested(async (event) => {
             event.preventDefault();
-            if (busy || dialog) return;
+            if (busy || dialog || recoveryOpen) return;
             await run(async () => {
               for (const tab of tabs) if (!(await confirmTab(tab))) return;
               persist(
@@ -553,10 +665,21 @@
                 active?.path || '',
                 zoom,
               );
+              for (const tab of tabs) {
+                rememberPosition(tab);
+                await backups.clear(tab.id);
+              }
+              await backups.settle();
               await getCurrentWindow().destroy();
             });
           }),
         );
+        try {
+          for (const position of await api.positions())
+            backups.positions.set(pathKey(position.path), position);
+        } catch (e) {
+          fail('读取位置记录失败：' + String(e));
+        }
         const incoming = await api.pending();
         if (initial.workspace)
           try {
@@ -579,6 +702,12 @@
       }
       if (!tabs.length && !workspace) newTab(welcome, '欢迎使用.md', false);
       ready = true;
+      if (desktop) {
+        const result = await api.drafts();
+        drafts = result.drafts;
+        if (result.warnings.length) fail(result.warnings.join('；'));
+        recoveryOpen = drafts.length > 0;
+      }
       if (queuedOpen) await drainIncoming();
     })().catch(fail);
     return () => {
@@ -589,6 +718,22 @@
   });
 </script>
 
+{#if quickOpen}<QuickOpen
+    {workspace}
+    items={[
+      ...tabs.map((t) => ({ id: t.id, name: t.name, path: t.path })),
+      ...recent.map((path) => ({ name: basename(path), path })),
+    ]}
+    onopen={(item) => run(() => openQuick(item))}
+    onclose={() => (quickOpen = false)}
+  />{/if}
+{#if recoveryOpen}<DraftRecovery
+    {drafts}
+    {busy}
+    onrestore={(ids) => run(() => restoreDrafts(ids))}
+    ondiscard={(ids) => run(() => discardDrafts(ids))}
+    onclose={() => (recoveryOpen = false)}
+  />{/if}
 <svelte:window on:keydown={shortcuts} on:focus={checkExternal} />
 {#if exporting}<div class="pdf-progress" role="status" aria-live="polite">
     正在排版并导出 PDF，请稍候…
@@ -696,6 +841,13 @@
         >
       </div>
       <div class="toolbar-right">
+        <button
+          class="icon-button"
+          title="快速打开 Ctrl+P"
+          aria-label="快速打开"
+          disabled={busy}
+          on:click={showQuick}><FolderOpen size={17} /></button
+        >
         <div class="zoom-controls" role="group" aria-label="文档缩放">
           <button
             aria-label="缩小文档"
@@ -750,6 +902,9 @@
             title="更多操作"
             on:click={() => (menu = !menu)}><Ellipsis size={19} /></button
           >{#if menu}<div class="dropdown">
+              <button disabled={busy} on:click={() => run(showRecovery)}
+                ><Clock3 size={16} />恢复草稿</button
+              >
               <button on:click={() => run(openFiles)}>打开文件 <kbd>Ctrl O</kbd></button><button
                 on:click={() => run(openFolder)}>打开文件夹 <kbd>Ctrl Shift O</kbd></button
               ><button disabled={!active} on:click={() => run(() => saveTab(active!, true))}
@@ -829,6 +984,10 @@
                 id={active.id}
                 {zoom}
                 content={active.content}
+                position={active.position}
+                onposition={(cursor, line) => {
+                  if (active) rememberPosition(active, { cursor, editorLine: line });
+                }}
                 onchange={(value) => active && patch(active.id, { content: value })}
                 onscroll={(position) => preview?.syncFromEditor(position)}
               />{/key}
@@ -858,6 +1017,11 @@
             {zoom}
             syncEnabled={active.edit}
             scroll={active.scroll}
+            location={active.position}
+            onposition={(position) => {
+              if (active) rememberPosition(active, position);
+            }}
+            onerror={fail}
             onscroll={(position) => {
               if (active) active.scroll = position;
             }}

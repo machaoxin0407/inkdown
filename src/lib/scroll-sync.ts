@@ -30,3 +30,26 @@ export function previewScrollTop(position: SourceScroll, anchors: ScrollAnchor[]
       : 0;
   return Math.max(0, Math.min(max, left.top + (right.top - left.top) * fraction));
 }
+
+/** Inverse mapping for restoring the same source location after reflow. */
+export function sourcePosition(top: number, anchors: ScrollAnchor[], max: number): SourceScroll {
+  let left = anchors[0],
+    right = anchors[anchors.length - 1];
+  for (const point of anchors) {
+    if (point.top <= top) left = point;
+    else {
+      right = point;
+      break;
+    }
+  }
+  const fraction =
+    left && right && right.top > left.top
+      ? Math.max(0, Math.min(1, (top - left.top) / (right.top - left.top)))
+      : 0;
+  return {
+    line: left ? left.line + (right.line - left.line) * fraction : 0,
+    progress: max > 0 ? top / max : 0,
+    atStart: top <= 1,
+    atEnd: max > 0 && top >= max - 1,
+  };
+}

@@ -13,6 +13,7 @@ export interface Tab extends DocumentData {
   edit: boolean;
   external: boolean;
   revision: number;
+  position?: import('./local-state').Position;
 }
 export interface Entry {
   name: string;

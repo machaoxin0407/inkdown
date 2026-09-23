@@ -26,6 +26,7 @@ try {
         stdio: 'ignore',
         env: {
           ...process.env,
+          INKDOWN_DATA_DIR: join(root, 'app-data'),
           WEBVIEW2_ADDITIONAL_BROWSER_ARGUMENTS: '--remote-debugging-port=9223',
           WEBVIEW2_USER_DATA_FOLDER: join(root, 'profile'),
         },

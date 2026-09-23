@@ -21,6 +21,8 @@ export function createEditor(
   content: string,
   onchange: (value: string) => void,
   onscroll: (position: SourceScroll) => void = () => {},
+  position: { cursor: number; editorLine: number } | undefined = undefined,
+  onposition: (cursor: number, line: number) => void = () => {},
 ) {
   let notify = onchange;
   let scrollFrame = 0;
@@ -32,6 +34,7 @@ export function createEditor(
       const y = Math.max(0, scroller.getBoundingClientRect().top - view.documentTop);
       const block = view.lineBlockAtHeight(y);
       const line = view.state.doc.lineAt(block.from).number - 1;
+      onposition(view.state.selection.main.head, line);
       onscroll({
         line: line + Math.max(0, Math.min(1, (y - block.top) / Math.max(1, block.height))),
         progress: max > 0 ? scroller.scrollTop / max : 0,
@@ -70,6 +73,18 @@ export function createEditor(
     }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) notify(update.state.doc.toString());
+      if (update.selectionSet)
+        onposition(
+          update.state.selection.main.head,
+          Math.max(
+            0,
+            view.state.doc.lineAt(
+              view.lineBlockAtHeight(
+                Math.max(0, view.scrollDOM.getBoundingClientRect().top - view.documentTop),
+              ).from,
+            ).number - 1,
+          ),
+        );
       if (update.docChanged || update.geometryChanged) scheduleScroll();
     }),
   ];
@@ -85,6 +100,16 @@ export function createEditor(
   const view = new EditorView({ state, parent: host });
   view.scrollDOM.addEventListener('scroll', scheduleScroll, { passive: true });
   if (stored) view.scrollDOM.scrollTop = stored.scroll;
+  else if (position) {
+    const cursor = Math.min(view.state.doc.length, Math.max(0, position.cursor));
+    const line = view.state.doc.line(
+      Math.max(1, Math.min(view.state.doc.lines, position.editorLine + 1)),
+    );
+    view.dispatch({
+      selection: { anchor: cursor },
+      effects: EditorView.scrollIntoView(line.from, { y: 'start' }),
+    });
+  }
   scheduleScroll();
   return {
     focus: () => view.focus(),

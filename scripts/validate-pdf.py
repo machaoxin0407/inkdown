@@ -12,6 +12,7 @@ for key in ['output', 'edited']:
     expected = ['PDF导出验证', '开始阅读', '导出文档', 'Localimage/PDF', '第20节'] if key == 'output' else ['未保存编辑', '导出当前内容']
     for value in expected:
         assert value in text, f'Missing text: {value}'
+    assert '复制' not in text, 'Copy button leaked into PDF'
     assert 594 < float(reader.pages[0].mediabox.width) < 596
     assert 841 < float(reader.pages[0].mediabox.height) < 843
     document = pypdfium2.PdfDocument(report[key])
