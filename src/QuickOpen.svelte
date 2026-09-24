@@ -1,4 +1,5 @@
 <script lang="ts">
+  import { indexState, refreshIndex, setWorkspace } from './lib/workspace';
   import { onMount } from 'svelte';
   import { api, desktop } from './lib/api';
   import { basename } from './lib/types';
@@ -9,15 +10,10 @@
   export let onopen: (item: QuickItem) => void;
   export let onclose: () => void;
   let query = '',
-    paths: string[] = [],
-    loading = false,
-    message = '',
     selected = 0,
     request = 0;
-  $: results = quickMatches(
-    [...items, ...paths.map((path) => ({ path, name: basename(path) }))],
-    query,
-  );
+  $: indexedItems = $indexState.paths.map((path) => ({ path, name: basename(path) }));
+  $: results = quickMatches([...items, ...indexedItems], query);
   $: if (query !== undefined) selected = 0;
   function displayPath(path: string) {
     const prefix = workspace.replace(/\\/g, '/').replace(/\/$/, '') + '/';
@@ -26,30 +22,10 @@
       ? normalized.slice(prefix.length)
       : path || '未命名文档 · 已打开';
   }
-  async function refresh() {
-    if (!desktop || !workspace) return;
-    const token = ++request;
-    loading = true;
-    message = '';
-    try {
-      const result = await api.index(workspace);
-      if (token !== request) return;
-      if (!result.cancelled) {
-        paths = result.paths;
-        message = result.skipped ? `有 ${result.skipped} 个目录或文件无法访问，已跳过` : '';
-      }
-    } catch (e) {
-      if (token === request) message = String(e);
-    } finally {
-      if (token === request) loading = false;
-    }
-  }
+  const refresh = () => refreshIndex(true);
   onMount(() => {
-    void refresh();
-    return () => {
-      request++;
-      if (desktop) void api.cancelIndex().catch(() => {});
-    };
+    setWorkspace(workspace);
+    void refreshIndex();
   });
   function keys(event: KeyboardEvent) {
     if (event.ctrlKey && event.key.toLowerCase() === 'p') event.preventDefault();
@@ -98,10 +74,13 @@
       aria-controls="quick-results"
     />
     <div class="feature-note">
-      <span>{loading ? '正在索引工作区…' : `${results.length} 个结果 · ↑↓ 选择，Enter 打开`}</span
+      <span
+        >{$indexState.loading
+          ? '正在索引工作区…'
+          : `${results.length} 个结果 · ↑↓ 选择，Enter 打开`}</span
       ><button disabled={!workspace} on:click={refresh}>刷新索引</button>
     </div>
-    {#if message}<p role="status">{message}</p>{/if}
+    {#if $indexState.message}<p role="status">{$indexState.message}</p>{/if}
     <div class="quick-results" id="quick-results">
       {#each results as item, i}<button
           id={'quick-' + i}
@@ -112,7 +91,7 @@
           ></button
         >{/each}
       {#if !results.length}<p class="feature-note">
-          {loading ? '正在查找 Markdown 文件…' : '没有匹配的文件'}
+          {$indexState.loading ? '正在查找 Markdown 文件…' : '没有匹配的文件'}
         </p>{/if}
     </div>
   </div>

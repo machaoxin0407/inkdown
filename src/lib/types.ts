@@ -21,6 +21,7 @@ export interface Entry {
   directory: boolean;
 }
 export interface Heading {
+  line?: number;
   id: string;
   text: string;
   level: number;

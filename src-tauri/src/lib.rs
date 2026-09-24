@@ -5,6 +5,7 @@ use std::{collections::HashSet, fs, io::Write, path::{Path, PathBuf}, sync::Mute
 use tauri::{Emitter, Manager, State};
 mod pdf;
 mod local_state;
+mod workspace;
 
 #[derive(Default)]
 struct Access { documents: Mutex<HashSet<PathBuf>>, roots: Mutex<HashSet<PathBuf>>, pending: Mutex<Vec<String>> }
@@ -130,6 +131,7 @@ fn take_open_paths(access: State<Access>) -> Result<Vec<String>, String> { Ok(st
 pub fn run() {
     tauri::Builder::default()
         .manage(Access::default())
+        .manage(workspace::WorkspaceState::default())
         .manage(local_state::LocalState::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             let paths: Vec<String> = args.into_iter().skip(1).map(|p| PathBuf::from(&cwd).join(p)).filter(|p| p.is_file() && markdown(p)).map(|p| display(&p)).collect();
@@ -144,7 +146,7 @@ pub fn run() {
             *app.state::<Access>().pending.lock().unwrap() = paths;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![read_document, open_workspace, list_directory, save_document, document_fingerprint, read_image, take_open_paths, pdf::export_pdf, local_state::list_drafts, local_state::write_draft, local_state::delete_draft, local_state::read_positions, local_state::write_position, local_state::index_workspace, local_state::cancel_index])
+        .invoke_handler(tauri::generate_handler![workspace::watch_paths, workspace::search_workspace, workspace::cancel_search, workspace::create_entry, workspace::rename_document, workspace::reveal_document, workspace::write_attachment, workspace::import_attachment, read_document, open_workspace, list_directory, save_document, document_fingerprint, read_image, take_open_paths, pdf::export_pdf, local_state::list_drafts, local_state::write_draft, local_state::delete_draft, local_state::read_positions, local_state::write_position, local_state::relocate_position, local_state::index_workspace, local_state::cancel_index])
         .run(tauri::generate_context!()).expect("无法启动墨页");
 }
 

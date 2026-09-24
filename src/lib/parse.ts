@@ -124,7 +124,7 @@ md.core.ruler.after('inline', 'tasks', (state) => {
     token.children!.unshift(input);
   });
 });
-export function parseMarkdown(source: string): { html: string; headings: Heading[] } {
+export function parseMarkdown(source: string): { html: string; headings: Heading[]; blocks: {line: number; end: number}[] } {
   const env = {},
     tokens = md.parse(source, env),
     headings: Heading[] = [];
@@ -137,6 +137,7 @@ export function parseMarkdown(source: string): { html: string; headings: Heading
       tokens[i].attrSet('id', id);
       headings.push({
         id,
+        line: token.map?.[0] || 0,
         level: Number(tokens[i].tag[1]),
         text:
           tokens[i + 1].children
@@ -145,5 +146,5 @@ export function parseMarkdown(source: string): { html: string; headings: Heading
       });
     }
   }
-  return { html: md.renderer.render(tokens, md.options, env), headings };
+  return { html: md.renderer.render(tokens, md.options, env), headings, blocks: tokens.filter(t => t.map && t.level === 0 && t.type !== 'inline').map(t => ({line: t.map![0], end: t.map![1]})) };
 }

@@ -1,8 +1,16 @@
 use std::{fs, io::Write, path::PathBuf};
 
+#[derive(serde::Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct PdfOptions { paper: String, landscape: bool, top: f64, right: f64, bottom: f64, left: f64, page_numbers: bool }
+impl Default for PdfOptions { fn default() -> Self { Self {paper: "A4".into(), landscape: false, top:15., right:15., bottom:15., left:15., page_numbers:false} } }
 #[tauri::command]
-pub async fn export_pdf(window: tauri::WebviewWindow, path: String) -> Result<(), String> {
+pub async fn export_pdf(window: tauri::WebviewWindow, path: String, options: Option<PdfOptions>) -> Result<(), String> {
     if window.label() != "main" { return Err("无权导出".into()); }
+    let options = options.unwrap_or_default();
+    if ![options.top,options.right,options.bottom,options.left].iter().all(|v| v.is_finite() && (5.0..=50.0).contains(v)) || !matches!(options.paper.as_str(), "A4" | "Letter") { return Err("PDF 设置无效".into()); }
+    let (mut width, mut height) = if options.paper == "Letter" {(215.9,279.4)} else {(210.0,297.0)};
+    if options.landscape { std::mem::swap(&mut width, &mut height); }
     let target = PathBuf::from(path);
     if !target.is_absolute() || !target.extension().is_some_and(|s| s.eq_ignore_ascii_case("pdf")) {
         return Err("请选择 .pdf 保存路径".into());
@@ -30,14 +38,16 @@ pub async fn export_pdf(window: tauri::WebviewWindow, path: String) -> Result<()
                 let core: ICoreWebView2_7 = webview.controller().CoreWebView2()?.cast()?;
                 let environment: ICoreWebView2Environment6 = webview.environment().cast()?;
                 let settings = environment.CreatePrintSettings()?;
-                settings.SetPageWidth(8.2677)?;
-                settings.SetPageHeight(11.6929)?;
-                settings.SetMarginTop(0.59)?;
-                settings.SetMarginBottom(0.59)?;
-                settings.SetMarginLeft(0.59)?;
-                settings.SetMarginRight(0.59)?;
+                settings.SetPageWidth(width / 25.4)?;
+                settings.SetPageHeight(height / 25.4)?;
+                settings.SetMarginTop(options.top / 25.4)?;
+                settings.SetMarginBottom(options.bottom / 25.4)?;
+                settings.SetMarginLeft(options.left / 25.4)?;
+                settings.SetMarginRight(options.right / 25.4)?;
                 settings.SetShouldPrintBackgrounds(true)?;
-                settings.SetShouldPrintHeaderAndFooter(false)?;
+                settings.SetShouldPrintHeaderAndFooter(options.page_numbers)?;
+                settings.SetHeaderTitle(&HSTRING::from(" "))?;
+                settings.SetFooterUri(&HSTRING::from(" "))?;
                 let handler = PrintToPdfCompletedHandler::create(Box::new(move |result, success| {
                     let outcome = result.map_err(super::err).and_then(|_| if success { Ok(()) } else { Err("PDF 导出失败，请选择可写位置后重试".into()) });
                     let _ = done.send(outcome);

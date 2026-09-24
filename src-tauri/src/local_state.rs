@@ -182,6 +182,16 @@ pub fn write_position(
     let _g = state.lock.lock().map_err(err)?;
     put_position(&root(&app)?, position)
 }
+#[tauri::command]
+pub fn relocate_position(app: tauri::AppHandle, state: State<LocalState>, old_path: String, new_path: String) -> Result<(), String> {
+    let _g = state.lock.lock().map_err(err)?;
+    let root = root(&app)?;
+    let mut all = positions(&root)?;
+    let old = all.iter().find(|p| p.path.eq_ignore_ascii_case(&old_path)).cloned();
+    all.retain(|p| !p.path.eq_ignore_ascii_case(&old_path) && !p.path.eq_ignore_ascii_case(&new_path));
+    if let Some(mut p) = old {p.path = new_path; all.push(p);}
+    atomic_json(&root.join("positions.json"), &Positions {version:1,positions:all})
+}
 #[derive(Serialize)]
 pub struct IndexResult {
     paths: Vec<String>,

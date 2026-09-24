@@ -92,10 +92,12 @@ const results = [];
 async function check(name, fn) {
   console.log('CHECK', name);
   try {
+    await expect(page.locator('.open-folder')).toBeEnabled();
     await fn();
     results.push({ name, passed: true });
   } catch (e) {
     console.log(String(e));
+    console.log((await page.locator('body').innerText()).slice(0,3500));
     results.push({ name, passed: false, error: String(e) });
     await page.screenshot({ path: 'artifacts/native-failure.png' }).catch(() => {});
   }
@@ -109,6 +111,7 @@ async function open(path) {
   await picker([path]);
   await page.keyboard.press('Control+o');
   await page.getByRole('tab', { name: path.split(/[\\/]/).pop(), exact: true }).waitFor();
+  await expect(page.locator('.open-folder')).toBeEnabled();
 }
 await check('startup argument + UTF8 BOM CRLF save', async () => {
   await edit('# 保存测试\n\n修改内容\n');

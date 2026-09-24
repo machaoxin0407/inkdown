@@ -152,6 +152,17 @@ export interface QuickItem {
 export function quickMatches(items: QuickItem[], query: string): QuickItem[] {
   const q = query.trim().toLocaleLowerCase(),
     seen = new Set<string>();
+  if (!q) {
+    const result: QuickItem[] = [];
+    for (const item of items) {
+      const key = item.path ? pathKey(item.path) : item.id!;
+      if (seen.has(key)) continue;
+      seen.add(key);
+      result.push(item);
+      if (result.length === 50) break;
+    }
+    return result;
+  }
   return items
     .flatMap((item, index) => {
       const key = item.path ? pathKey(item.path) : item.id!;

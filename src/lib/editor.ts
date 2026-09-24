@@ -99,7 +99,7 @@ export function createEditor(
   }
   const view = new EditorView({ state, parent: host });
   view.scrollDOM.addEventListener('scroll', scheduleScroll, { passive: true });
-  if (stored) view.scrollDOM.scrollTop = stored.scroll;
+  if (stored && stored.state.doc.toString() === content) view.scrollDOM.scrollTop = stored.scroll;
   else if (position) {
     const cursor = Math.min(view.state.doc.length, Math.max(0, position.cursor));
     const line = view.state.doc.line(
@@ -114,6 +114,24 @@ export function createEditor(
   return {
     focus: () => view.focus(),
     find: () => openSearchPanel(view),
+    select(from: number, to: number) {
+      from = Math.max(0, Math.min(view.state.doc.length, from));
+      to = Math.max(from, Math.min(view.state.doc.length, to));
+      view.dispatch({
+        selection: { anchor: from, head: to },
+        effects: EditorView.scrollIntoView(from, { y: 'center' }),
+      });
+      view.focus();
+    },
+    selected: () =>
+      view.state.sliceDoc(view.state.selection.main.from, view.state.selection.main.to),
+    insert(text: string) {
+      view.dispatch(view.state.replaceSelection(text), {
+        scrollIntoView: true,
+        userEvent: 'input',
+      });
+      view.focus();
+    },
     setZoom(percent: number) {
       view.dom.style.fontSize = `${(14 * percent) / 100}px`;
       view.requestMeasure();

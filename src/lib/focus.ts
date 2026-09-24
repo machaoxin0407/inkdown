@@ -1,7 +1,7 @@
 export function modalFocus(node: HTMLElement) {
   const previous = document.activeElement as HTMLElement;
   const elements = () =>
-    [...node.querySelectorAll<HTMLElement>('input,button,[tabindex="0"]')].filter(
+    [...node.querySelectorAll<HTMLElement>('input,button,select,textarea,[tabindex="0"]')].filter(
       (el) => !el.hasAttribute('disabled'),
     );
   queueMicrotask(() => (node.querySelector<HTMLElement>('input') || elements()[0])?.focus());

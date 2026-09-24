@@ -29,6 +29,7 @@ await Promise.all(
 );
 let child, browser, page;
 const results = [],
+  skipped = [],
   errors = [];
 const binary = resolve(process.env.INKDOWN_TEST_BINARY || 'src-tauri/target/release/inkdown.exe');
 async function launch(args = []) {
@@ -105,18 +106,24 @@ try {
   // Native clipboard: user gesture plus OS clipboard read via PowerShell.
   await page.getByRole('button', { name: '复制代码', exact: true }).click();
   await expect(page.locator('.copy-code')).toHaveText('已复制');
-  const clipboard = execFileSync(
-    'powershell.exe',
-    [
-      '-NoProfile',
-      '-Command',
-      '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); [Console]::Write((Get-Clipboard -Raw))',
-    ],
-    { encoding: 'utf8', windowsHide: true },
-  );
-  if (clipboard.replace(/\r\n/g, '\n') !== code)
-    throw Error('Clipboard content mismatch: ' + JSON.stringify(clipboard));
-  results.push('native clipboard preserves Chinese, indentation, symbols and newline');
+  if (process.env.INKDOWN_SKIP_OS_CLIPBOARD === '1') {
+    skipped.push(
+      'OS clipboard read: unavailable in this desktop session; copy success and denial UI still exercised',
+    );
+  } else {
+    const clipboard = execFileSync(
+      'powershell.exe',
+      [
+        '-NoProfile',
+        '-Command',
+        '[Console]::OutputEncoding=[System.Text.UTF8Encoding]::new(); $clipboardValue = $null; for ($attempt = 0; $attempt -lt 10; $attempt++) { try { $clipboardValue = Get-Clipboard -Raw -ErrorAction Stop; break } catch { Start-Sleep -Milliseconds 100 } }; if ($null -eq $clipboardValue) { throw "Clipboard read unavailable" }; [Console]::Write($clipboardValue)',
+      ],
+      { encoding: 'utf8', windowsHide: true },
+    );
+    if (clipboard.replace(/\r\n/g, '\n') !== code)
+      throw Error('Clipboard content mismatch: ' + JSON.stringify(clipboard));
+    results.push('native clipboard preserves Chinese, indentation, symbols and newline');
+  }
   await page.evaluate(() => {
     window.__originalCopy = navigator.clipboard.writeText.bind(navigator.clipboard);
     navigator.clipboard.writeText = async () => {
@@ -356,8 +363,11 @@ try {
   await expect.poll(() => page.locator('.preview-scroll').evaluate((el) => el.scrollTop)).toBe(0);
   results.push('reopening a shortened document clamps saved position');
   if (errors.length) throw Error(errors.join('\n'));
-  await writeFile('artifacts/productivity-report.json', JSON.stringify({ root, results }, null, 2));
-  console.log(JSON.stringify({ root, results }, null, 2));
+  await writeFile(
+    'artifacts/productivity-report.json',
+    JSON.stringify({ root, results, skipped }, null, 2),
+  );
+  console.log(JSON.stringify({ root, results, skipped }, null, 2));
 } catch (e) {
   console.log('Completed checks:', results);
   await page?.screenshot({ path: 'artifacts/productivity-failure.png' }).catch(() => {});

@@ -59,6 +59,13 @@
   import Editor from './Editor.svelte';
   import Preview from './Preview.svelte';
   import Tree from './Tree.svelte';
+  import Outline from './Outline.svelte';
+  import ActionDialog from './ActionDialog.svelte';
+  import SettingsPanel from './Settings.svelte';
+  import { readingPreferences, pdfPreferences } from './lib/preferences';
+  import { clearImageCache, clearRenderCaches } from './lib/render';
+  import WorkspaceSearch from './WorkspaceSearch.svelte';
+  import { setWorkspace, updateIndex, type FileChanges, type SearchHit } from './lib/workspace';
   import QuickOpen from './QuickOpen.svelte';
   import DraftRecovery from './DraftRecovery.svelte';
   import {
@@ -117,6 +124,191 @@
     }
   }
   const initial = settings();
+  let preferencesOpen = false;
+  let reading = readingPreferences(),
+    pdfOptions = pdfPreferences();
+  try {
+    const stored = JSON.parse(localStorage.getItem('inkdown.preferences') || '{}');
+    reading = readingPreferences(stored.reading);
+    pdfOptions = pdfPreferences(stored.pdf);
+  } catch {}
+  let expanded: Record<string, Entry[]> = {},
+    opened: string[] = [],
+    limits: Record<string, number> = {};
+  let treeRoot = '';
+  $: if (workspace !== treeRoot) {
+    treeRoot = workspace;
+    expanded = {};
+    limits = {};
+    try {
+      opened = JSON.parse(localStorage.getItem('inkdown.tree:' + workspace) || '[]');
+      if (!Array.isArray(opened)) opened = [];
+    } catch {
+      opened = [];
+    }
+  }
+  function saveTree() {
+    try {
+      localStorage.setItem('inkdown.tree:' + workspace, JSON.stringify(opened));
+    } catch {}
+  }
+  async function refreshTree(changes?: string[]) {
+    if (!workspace) return;
+    const root = workspace;
+    const value = await api.list(root);
+    if (root !== workspace) return;
+    entries = value;
+    const next = { ...expanded };
+    for (const path of Object.keys(next)) {
+      if (
+        changes &&
+        !changes.some(
+          (p) =>
+            pathKey(p).startsWith(pathKey(path) + '/') ||
+            pathKey(path).startsWith(pathKey(p) + '/'),
+        )
+      )
+        continue;
+      try {
+        next[path] = await api.list(path);
+      } catch {
+        delete next[path];
+        opened = opened.filter((p) => p !== path);
+      }
+    }
+    if (root === workspace) {
+      expanded = next;
+      saveTree();
+    }
+  }
+  let actionForm: {
+    title: string;
+    note?: string;
+    fields: {
+      key: string;
+      label: string;
+      value: string;
+      type?: string;
+      min?: number;
+      max?: number;
+    }[];
+    resolve: (value: Record<string, string> | null) => void;
+  } | null = null;
+  function inputForm(title: string, fields: NonNullable<typeof actionForm>['fields'], note = '') {
+    return new Promise<Record<string, string> | null>((resolve) => {
+      actionForm = { title, fields, note, resolve };
+    });
+  }
+  function answerForm(value: Record<string, string> | null) {
+    const current = actionForm;
+    actionForm = null;
+    current?.resolve(value);
+  }
+  async function treeAction(action: string, entry: Entry) {
+    if (action === 'reveal') {
+      await api.reveal(entry.path);
+      return;
+    }
+    if (action === 'rename') {
+      const tab = tabs.find((t) => pathKey(t.path) === pathKey(entry.path));
+      if (tab) {
+        if (!(await confirmTab(tab))) return;
+        const current = tabs.find((t) => t.id === tab.id);
+        if (current && current.content !== current.saved) await reloadTab(current, true);
+      }
+      const data = await inputForm(
+        '重命名文档',
+        [{ key: 'name', label: '文件名', value: entry.name }],
+        '仅修改当前文件名；其他文档中的链接不会自动改写。',
+      );
+      if (!data) return;
+      const current = await api.read(entry.path);
+      const path = await api.rename(entry.path, data.name, current.fingerprint);
+      await backups.settle();
+      try {
+        await api.relocatePosition(entry.path, path);
+      } catch (e) {
+        fail('已重命名，但位置记录迁移失败：' + String(e));
+      }
+      const oldPosition = backups.positions.get(pathKey(entry.path));
+      backups.positions.delete(pathKey(entry.path));
+      if (oldPosition) backups.positions.set(pathKey(path), { ...oldPosition, path });
+      if (tab) {
+        patch(tab.id, { path, name: basename(path) });
+        const updated = tabs.find((t) => t.id === tab.id)!;
+        rememberPosition(updated);
+      }
+      recent = recent.map((p) => (pathKey(p) === pathKey(entry.path) ? path : p));
+      await updateIndex([entry.path, path]);
+    } else {
+      const data = await inputForm(action === 'folder' ? '新建文件夹' : '新建文档', [
+        { key: 'name', label: '名称', value: action === 'folder' ? '新建文件夹' : '未命名.md' },
+      ]);
+      if (!data) return;
+      const path = await api.create(entry.path, data.name, action === 'folder');
+      if (action !== 'folder') await openPath(path);
+    }
+    await refreshTree();
+  }
+  async function insertContent(kind: string, file?: File) {
+    const id = activeId;
+    if (!active?.edit) return;
+    const chosen = editor?.selected() || '';
+    if (kind === 'link') {
+      const values = await inputForm('插入链接', [
+        { key: 'text', label: '链接文字', value: chosen || '链接' },
+        { key: 'url', label: '链接地址', value: 'https://' },
+      ]);
+      if (values && activeId === id)
+        editor?.insert(
+          '[' +
+            values.text.replace(/([\[\]\\])/g, '\\$1') +
+            '](<' +
+            values.url.replace(/>/g, '%3E') +
+            '>)',
+        );
+    } else if (kind === 'table') {
+      const values = await inputForm('插入表格', [
+        { key: 'rows', label: '正文行数', value: '3', type: 'number', min: 1, max: 50 },
+        { key: 'cols', label: '列数', value: '3', type: 'number', min: 1, max: 20 },
+      ]);
+      if (!values || activeId !== id) return;
+      const cols = Math.max(1, Math.min(20, Number(values.cols))),
+        rows = Math.max(1, Math.min(50, Number(values.rows)));
+      editor?.insert(
+        '\n' +
+          '| ' +
+          Array.from({ length: cols }, (_, i) => '列 ' + (i + 1)).join(' | ') +
+          ' |\n| ' +
+          Array(cols).fill('---').join(' | ') +
+          ' |\n' +
+          ('| ' + Array(cols).fill(' ').join(' | ') + ' |\n').repeat(rows),
+      );
+    } else {
+      let tab = tabs.find((t) => t.id === id)!;
+      if (!tab.path && !(await saveTab(tab))) return;
+      tab = tabs.find((t) => t.id === id)!;
+      let reference: string;
+      if (file) {
+        if (file.size > 16 * 1024 * 1024) throw new Error('图片超过 16 MB');
+        reference = await api.attachment(tab.path, file.name || 'clipboard.png', [
+          ...new Uint8Array(await file.arrayBuffer()),
+        ]);
+      } else {
+        const source = await api.chooseImage();
+        if (typeof source !== 'string') return;
+        reference = await api.importImage(tab.path, source);
+      }
+      if (activeId === id)
+        editor?.insert('![图片](<' + reference.split('/').map(encodeURIComponent).join('/') + '>)');
+    }
+  }
+  let lastCountSource = '',
+    characterCount = 0;
+  $: if (active && active.content !== lastCountSource) {
+    lastCountSource = active.content;
+    characterCount = active.content.replace(/\s/g, '').length;
+  }
   let zoom = initial.zoom;
   let theme = initial.theme,
     sidebar = initial.sidebar,
@@ -128,7 +320,7 @@
     workspace = '';
   let entries: Entry[] = [],
     headings: Heading[] = [],
-    sideMode: 'files' | 'outline' = 'files';
+    sideMode: 'files' | 'outline' | 'search' = 'files';
   let busy = false,
     toast = '',
     error = '',
@@ -277,7 +469,7 @@
     exporting = true;
     try {
       const { exportPdf } = await import('./lib/pdf');
-      await exportPdf(content, path, /\.pdf$/i.test(output) ? output : output + '.pdf');
+      await exportPdf(content, path, /\.pdf$/i.test(output) ? output : output + '.pdf', pdfOptions);
       notify('PDF 已导出');
     } finally {
       exporting = false;
@@ -408,10 +600,10 @@
     tabs = tabs.filter((t) => t.id !== id);
     if (activeId === id) activeId = tabs[Math.min(index, tabs.length - 1)]?.id || '';
     if (!tabs.length) headings = [];
-    if (tab.edit) {
-      const { forgetEditor } = await import('./lib/editor');
-      setTimeout(() => forgetEditor(id));
-    }
+    await tick();
+    const { forgetEditor } = await import('./lib/editor');
+    forgetEditor(id);
+    clearRenderCaches();
   }
   async function switchWorkspace(path: string) {
     const root = await api.workspace(path);
@@ -425,7 +617,12 @@
     quickOpen = false;
     workspace = root;
     entries = listed;
+    const closedIds = tabs.map((tab) => tab.id);
     tabs = [];
+    await tick();
+    const { forgetEditor } = await import('./lib/editor');
+    closedIds.forEach(forgetEditor);
+    clearRenderCaches();
     activeId = '';
     headings = [];
     treeVersion++;
@@ -516,16 +713,93 @@
       }
     }
   }
-  async function checkExternal() {
-    if (!desktop || busy || dialog) return;
-    for (const tab of tabs.filter((t) => t.path)) {
-      try {
-        const fingerprint = await api.fingerprint(tab.path);
-        if (fingerprint !== tab.fingerprint) patch(tab.id, { external: true });
-      } catch {
-        patch(tab.id, { external: true });
+  let externalTimer: ReturnType<typeof setTimeout>;
+  let checkingExternal = false,
+    watchFailed = true,
+    watchGeneration = 0;
+  let selection: { from: number; to: number; nonce: number } | undefined;
+  let watchSignature = '';
+  $: if (ready && desktop)
+    configureWatch(
+      workspace,
+      tabs
+        .map((t) => t.path)
+        .filter(Boolean)
+        .join('\n'),
+    );
+  async function configureWatch(root: string, list: string) {
+    const signature = root + '\0' + list;
+    if (signature === watchSignature) return;
+    watchSignature = signature;
+    const generation = ++watchGeneration;
+    setWorkspace(root);
+    try {
+      await api.watch(root, list ? list.split('\n') : [], generation);
+      if (generation === watchGeneration) watchFailed = false;
+    } catch (e) {
+      if (generation === watchGeneration) {
+        watchFailed = true;
+        fail('文件监听不可用，已改为定时检查：' + String(e));
       }
     }
+  }
+  async function checkExternal(changed?: string[]) {
+    if (!desktop) return;
+    if (busy || dialog || checkingExternal) {
+      clearTimeout(externalTimer);
+      externalTimer = setTimeout(() => checkExternal(), 400);
+      return;
+    }
+    checkingExternal = true;
+    try {
+      for (const tab of tabs.filter(
+        (t) => t.path && (!changed || changed.some((p) => pathKey(p) === pathKey(t.path))),
+      )) {
+        try {
+          const fingerprint = await api.fingerprint(tab.path);
+          const latest = tabs.find((t) => t.id === tab.id);
+          if (!latest || latest.fingerprint !== tab.fingerprint || latest.path !== tab.path)
+            continue;
+          if (fingerprint === tab.fingerprint) {
+            if (latest.external) patch(tab.id, { external: false });
+            continue;
+          }
+          if (tab.content !== tab.saved || fingerprint === null) {
+            patch(tab.id, { external: true });
+            continue;
+          }
+          const document = await api.read(tab.path);
+          const current = tabs.find((t) => t.id === tab.id);
+          if (!current) continue;
+          if (
+            current.content !== tab.content ||
+            current.saved !== tab.saved ||
+            current.revision !== tab.revision
+          ) {
+            patch(tab.id, { external: true });
+            continue;
+          }
+          const { forgetEditor } = await import('./lib/editor');
+          forgetEditor(tab.id);
+          if (activeId === tab.id) preview?.restorePosition(positionOf(current));
+          patch(tab.id, {
+            ...document,
+            saved: document.content,
+            external: false,
+            revision: current.revision + 1,
+          });
+        } catch {
+          patch(tab.id, { external: true });
+        }
+      }
+    } finally {
+      checkingExternal = false;
+    }
+  }
+  async function openSearchHit(hit: SearchHit) {
+    await openPath(hit.path);
+    patch(activeId, { edit: true });
+    selection = { ...hit, nonce: Date.now() };
   }
   async function openLink(href: string) {
     if (/^(https?:|mailto:)/i.test(href)) {
@@ -557,7 +831,7 @@
     theme = theme === 'system' ? 'light' : theme === 'light' ? 'dark' : 'system';
   }
   function shortcuts(event: KeyboardEvent) {
-    if (quickOpen || recoveryOpen) return;
+    if (quickOpen || recoveryOpen || actionForm || preferencesOpen) return;
     if (event.key === 'Escape') {
       menu = false;
       if (dialog) answer('cancel');
@@ -587,7 +861,13 @@
     if (key === 'n') newTab();
     if (key === 'w' && active) run(() => closeTab(active!.id));
     if (key === 'e') toggleEdit();
-    if (key === 'f') find();
+    if (key === 'f') {
+      if (event.shiftKey) {
+        sidebar = true;
+        sideMode = 'search';
+        tick().then(() => document.getElementById('workspace-query')?.focus());
+      } else find();
+    }
     if (key === 'b') sidebar = !sidebar;
   }
   function resize(event: PointerEvent) {
@@ -632,7 +912,29 @@
     const change = () => (systemDark = media.matches);
     media.addEventListener('change', change);
     cleanup.push(() => media.removeEventListener('change', change));
-    const poll = setInterval(checkExternal, 10000);
+    const workspaceShortcut = (event: KeyboardEvent) => {
+      if (
+        event.ctrlKey &&
+        event.shiftKey &&
+        event.key.toLowerCase() === 'f' &&
+        !dialog &&
+        !actionForm &&
+        !preferencesOpen &&
+        !quickOpen &&
+        !recoveryOpen
+      ) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        sidebar = true;
+        sideMode = 'search';
+        tick().then(() => document.getElementById('workspace-query')?.focus());
+      }
+    };
+    window.addEventListener('keydown', workspaceShortcut, true);
+    cleanup.push(() => window.removeEventListener('keydown', workspaceShortcut, true));
+    const poll = setInterval(() => {
+      if (watchFailed) void checkExternal();
+    }, 10000);
     cleanup.push(() => clearInterval(poll));
     (async () => {
       if (desktop) {
@@ -649,6 +951,22 @@
           }),
         );
         addCleanup(await listen('open-paths', drainIncoming));
+        addCleanup(
+          await listen<FileChanges>('workspace-changed', ({ payload }) => {
+            if (payload.generation !== watchGeneration) return;
+            if (payload.failed) {
+              watchFailed = true;
+              fail('文件监听中断，已改为定时检查');
+            }
+            void checkExternal(payload.paths);
+            void updateIndex(payload.paths);
+            if (workspace) void refreshTree(payload.paths).catch(fail);
+            if (payload.paths.some((p) => /\.(png|jpe?g|gif|webp|bmp|svg|ico)$/i.test(p))) {
+              clearImageCache();
+              preview?.refreshImages(payload.paths);
+            }
+          }),
+        );
         addCleanup(
           await getCurrentWindow().onCloseRequested(async (event) => {
             event.preventDefault();
@@ -714,10 +1032,33 @@
       disposed = true;
       cleanup.forEach((fn) => fn());
       clearTimeout(toastTimer);
+      clearTimeout(externalTimer);
     };
   });
 </script>
 
+{#if preferencesOpen}<SettingsPanel
+    {reading}
+    pdf={pdfOptions}
+    onclose={() => (preferencesOpen = false)}
+    onsave={(r, p) => {
+      reading = r;
+      pdfOptions = p;
+      try {
+        localStorage.setItem('inkdown.preferences', JSON.stringify({ reading: r, pdf: p }));
+      } catch (e) {
+        fail('设置已应用，但无法持久化：' + String(e));
+      }
+      preferencesOpen = false;
+    }}
+  />{/if}
+{#if actionForm}<ActionDialog
+    title={actionForm.title}
+    note={actionForm.note || ''}
+    fields={actionForm.fields}
+    onsubmit={answerForm}
+    onclose={() => answerForm(null)}
+  />{/if}
 {#if quickOpen}<QuickOpen
     {workspace}
     items={[
@@ -734,7 +1075,7 @@
     ondiscard={(ids) => run(() => discardDrafts(ids))}
     onclose={() => (recoveryOpen = false)}
   />{/if}
-<svelte:window on:keydown={shortcuts} on:focus={checkExternal} />
+<svelte:window on:keydown={shortcuts} on:focus={() => checkExternal()} />
 {#if exporting}<div class="pdf-progress" role="status" aria-live="polite">
     正在排版并导出 PDF，请稍候…
   </div>{/if}
@@ -743,7 +1084,7 @@
     <div class="brand">
       <span class="brand-icon"><Feather size={22} strokeWidth={1.6} /></span><strong
         >墨页<span>INKDOWN</span></strong
-      ><span class="version">v0.1</span>
+      ><span class="version">v0.2</span>
     </div>
     <div class="side-actions">
       <button class="open-folder" disabled={busy} on:click={() => run(openFolder)}
@@ -760,8 +1101,25 @@
         ><Folder size={14} />文件</button
       ><button class:chosen={sideMode === 'outline'} on:click={() => (sideMode = 'outline')}
         ><List size={15} />大纲</button
+      ><button class:chosen={sideMode === 'search'} on:click={() => (sideMode = 'search')}
+        ><Search size={14} />搜索</button
       >
     </div>
+    {#if workspace && sideMode === 'files'}<div class="tree-root-actions">
+        <button
+          disabled={busy}
+          on:click={() =>
+            run(() =>
+              treeAction('new', { path: workspace, name: basename(workspace), directory: true }),
+            )}>新建文档</button
+        ><button
+          disabled={busy}
+          on:click={() =>
+            run(() =>
+              treeAction('folder', { path: workspace, name: basename(workspace), directory: true }),
+            )}>新建文件夹</button
+        >
+      </div>{/if}
     <div class="side-content">
       {#if sideMode === 'files'}
         <div class="section-label">
@@ -771,19 +1129,22 @@
               disabled={busy}
               on:click={() =>
                 run(async () => {
-                  entries = await api.list(workspace);
-                  treeVersion++;
+                  await refreshTree();
                 })}><RefreshCw size={13} /></button
             >{/if}
         </div>
-        {#if workspace}{#key treeVersion}<Tree
-              {entries}
-              activePath={active?.path || ''}
-              onopen={(path) => run(() => openPath(path))}
-              onerror={fail}
-            />{/key}{#if !entries.length}<p class="side-hint">
-              此文件夹中还没有 Markdown 文档。
-            </p>{/if}
+        {#if workspace}<Tree
+            {entries}
+            bind:expanded
+            bind:opened
+            bind:limits
+            directory={workspace}
+            onstate={saveTree}
+            onaction={(action, entry) => run(() => treeAction(action, entry))}
+            activePath={active?.path || ''}
+            onopen={(path) => run(() => openPath(path))}
+            onerror={fail}
+          />{#if !entries.length}<p class="side-hint">此文件夹中还没有 Markdown 文档。</p>{/if}
         {:else}<div class="workspace-empty">
             <FolderOpen size={28} strokeWidth={1.2} />
             <p>把文档放在一起</p>
@@ -806,14 +1167,16 @@
               on:click={() => run(() => openPath(path))}
               ><FileText size={14} /><span class="truncate">{basename(path)}</span></button
             >{/each}{/if}
-      {:else}<div class="section-label">文档大纲 <span>{headings.length}</span></div>
-        {#each headings as heading}<button
-            class="outline-row"
-            style:padding-left={`${16 + (heading.level - 1) * 12}px`}
-            on:click={() => preview?.jump(heading.id)}>{heading.text}</button
-          >{/each}{#if !headings.length}<p class="side-hint">
-            文档中的标题会显示在这里。
-          </p>{/if}{/if}
+      {:else if sideMode === 'search'}<WorkspaceSearch
+          {workspace}
+          {tabs}
+          onopen={(hit) => run(() => openSearchHit(hit))}
+        />
+      {:else}<Outline
+          {headings}
+          line={active?.position?.line || 0}
+          onjump={(id) => preview?.jump(id)}
+        />{/if}
     </div>
     <div class="side-footer">
       <span><span class="status-dot"></span>本地存储 · 离线可用</span><button
@@ -882,6 +1245,12 @@
           disabled={!active || busy}
           on:click={() => run(() => saveTab(active!))}><Save size={17} /></button
         >
+        {#if active?.edit}<div class="insert-actions">
+            <button disabled={busy} on:click={() => run(() => insertContent('link'))}>链接</button
+            ><button disabled={busy} on:click={() => run(() => insertContent('table'))}>表格</button
+            ><button disabled={busy} on:click={() => run(() => insertContent('image'))}>图片</button
+            >
+          </div>{/if}
         <div class="mode-toggle">
           <button
             class:chosen={!active?.edit}
@@ -902,6 +1271,12 @@
             title="更多操作"
             on:click={() => (menu = !menu)}><Ellipsis size={19} /></button
           >{#if menu}<div class="dropdown">
+              <button
+                on:click={() => {
+                  menu = false;
+                  preferencesOpen = true;
+                }}>设置</button
+              >
               <button disabled={busy} on:click={() => run(showRecovery)}
                 ><Clock3 size={16} />恢复草稿</button
               >
@@ -985,6 +1360,8 @@
                 {zoom}
                 content={active.content}
                 position={active.position}
+                {selection}
+                onpasteimage={(file) => run(() => insertContent('image', file))}
                 onposition={(cursor, line) => {
                   if (active) rememberPosition(active, { cursor, editorLine: line });
                 }}
@@ -1012,6 +1389,7 @@
         {#key active.id}<Preview
             bind:this={preview}
             content={active.content}
+            {reading}
             path={active.path}
             {dark}
             {zoom}
@@ -1048,7 +1426,10 @@
           />{active?.content !== active?.saved ? '有未保存的修改' : '一切就绪'}{/if}</span
       >
       <div>
-        {#if active}<span>{active.content.replace(/\s/g, '').length.toLocaleString()} 字符</span
+        {#if active}<span
+            >{characterCount.toLocaleString()} 字符 · {Math.round(
+              (active.position?.progress || 0) * 100,
+            )}%</span
           ><span>UTF-8{active.bom ? ' BOM' : ''}</span><span>{active.newline}</span><span
             >Markdown</span
           >{/if}

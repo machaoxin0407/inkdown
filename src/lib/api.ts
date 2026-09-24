@@ -5,6 +5,39 @@ import type { DocumentData, Entry } from './types';
 export const desktop = isTauri();
 const filters = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown'] }];
 export const api = {
+  relocatePosition: (oldPath: string, newPath: string) =>
+    invoke<void>('relocate_position', { oldPath, newPath }),
+  watch: (workspace: string, paths: string[], generation: number) =>
+    invoke<void>('watch_paths', { workspace, paths, generation }),
+  cancelSearch: () => invoke<void>('cancel_search'),
+  search: (
+    path: string,
+    query: string,
+    sensitive: boolean,
+    overlays: { path: string; content: string }[],
+  ) =>
+    invoke<{
+      hits: import('./workspace').SearchHit[];
+      skipped: number;
+      truncated: boolean;
+      cancelled: boolean;
+    }>('search_workspace', { path, query, sensitive, overlays }),
+  create: (parent: string, name: string, directory: boolean) =>
+    invoke<string>('create_entry', { parent, name, directory }),
+  rename: (path: string, name: string, expected: string) =>
+    invoke<string>('rename_document', { path, name, expected }),
+  reveal: (path: string) => invoke<void>('reveal_document', { path }),
+  attachment: (document: string, name: string, bytes: number[]) =>
+    invoke<string>('write_attachment', { document, name, bytes }),
+  importImage: (document: string, source: string) =>
+    invoke<string>('import_attachment', { document, source }),
+  chooseImage: () =>
+    open({
+      multiple: false,
+      filters: [
+        { name: '图片', extensions: ['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'ico'] },
+      ],
+    }),
   drafts: () =>
     invoke<{ drafts: import('./local-state').Draft[]; warnings: string[] }>('list_drafts'),
   writeDraft: (draft: import('./local-state').Draft) => invoke<void>('write_draft', { draft }),
@@ -34,7 +67,8 @@ export const api = {
       filters: [{ name: 'PDF', extensions: ['pdf'] }],
       title: '导出为 PDF',
     }),
-  exportPdf: (path: string) => invoke<void>('export_pdf', { path }),
+  exportPdf: (path: string, options?: import('./preferences').PdfPreferences) =>
+    invoke<void>('export_pdf', { path, options }),
   external: async (url: string) => {
     if (!/^(https?:|mailto:)/i.test(url)) throw new Error('不支持此链接类型');
     if (desktop) await openUrl(url);
