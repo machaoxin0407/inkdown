@@ -73,19 +73,9 @@ export function createEditor(
     }),
     EditorView.updateListener.of((update) => {
       if (update.docChanged) notify(update.state.doc.toString());
-      if (update.selectionSet)
-        onposition(
-          update.state.selection.main.head,
-          Math.max(
-            0,
-            view.state.doc.lineAt(
-              view.lineBlockAtHeight(
-                Math.max(0, view.scrollDOM.getBoundingClientRect().top - view.documentTop),
-              ).from,
-            ).number - 1,
-          ),
-        );
-      if (update.docChanged || update.geometryChanged) scheduleScroll();
+      // Selection changes arrive inside CodeMirror's DOM update. Defer geometry
+      // reads to the shared animation frame instead of forcing layout there.
+      if (update.docChanged || update.geometryChanged || update.selectionSet) scheduleScroll();
     }),
   ];
   // Reconfigure the listener when restoring a tab so it targets the current owner.

@@ -63,9 +63,11 @@ try {
         : original(input, options);
   });
   async function exportTo(path) {
+    await expect(page.locator('.open-folder')).toBeEnabled();
     await page.evaluate((p) => window.__pdfPaths.push(p), path);
     await page.keyboard.press('Control+Shift+p');
-    await page.getByText('PDF 已导出', { exact: true }).waitFor();
+    await expect.poll(async () => (await readFile(path).catch(() => Buffer.alloc(0))).subarray(0,5).toString()).toBe('%PDF-');
+    await expect(page.locator('.open-folder')).toBeEnabled();
     await expect(page.locator('.pdf-export-root')).toHaveCount(0);
   }
   const output = join(root, '中文 输出.pdf');
@@ -81,9 +83,11 @@ try {
   await exportTo(edited);
   if ((await readFile(file, 'utf8')) !== source) throw Error('Source changed during export');
   results.push('dark theme and unsaved content; source unchanged');
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.evaluate(() => window.__pdfPaths.push(null));
   await page.keyboard.press('Control+Shift+p');
-  await page.waitForTimeout(300);
+  await page.waitForFunction(() => window.__pdfPaths.length === 0);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await expect(page.locator('.pdf-export-root')).toHaveCount(0);
   results.push('cancel leaves no export DOM');
   await chmod(edited, 0o444);

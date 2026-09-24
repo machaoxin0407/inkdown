@@ -675,6 +675,7 @@ a {
   overflow: hidden;
 }
 .editor-panel {
+  contain: strict;
   width: var(--editor-ratio);
   flex-shrink: 0;
   min-width: 0;
@@ -703,6 +704,7 @@ a {
   background: var(--accent-soft);
 }
 .preview-panel {
+  contain: strict;
   flex: 1;
   min-width: 0;
   min-height: 0;
