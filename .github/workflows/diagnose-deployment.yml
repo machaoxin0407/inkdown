@@ -1,0 +1,25 @@
+name: Diagnose download deployment
+on:
+  workflow_dispatch:
+permissions:
+  contents: read
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 3
+    environment: production
+    steps:
+      - name: Read server transfer status
+        env:
+          DEPLOY_KEY: ${{ secrets.DEPLOY_KEY }}
+          DEPLOY_KNOWN_HOSTS: ${{ secrets.DEPLOY_KNOWN_HOSTS }}
+          DEPLOY_HOST: ${{ vars.DEPLOY_HOST }}
+          DEPLOY_USER: ${{ vars.DEPLOY_USER }}
+        run: |
+          set -euo pipefail
+          umask 077
+          mkdir -p ~/.ssh
+          printf '%s\n' "$DEPLOY_KEY" | tr -d '\r' > ~/.ssh/id_ed25519
+          printf '%s\n' "$DEPLOY_KNOWN_HOSTS" | tr -d '\r' > ~/.ssh/known_hosts
+          trap 'rm -f ~/.ssh/id_ed25519' EXIT
+          ssh -o BatchMode=yes -o StrictHostKeyChecking=yes -o ConnectTimeout=20 -o ServerAliveInterval=15 -o ServerAliveCountMax=2 "${DEPLOY_USER}@${DEPLOY_HOST}" 'date -u; readlink -f /srv/inkdown/current; df -h /srv/inkdown; ps -u "$(id -u)" -o pid,etime,args; du -sb /srv/inkdown/incoming/* 2>/dev/null || true; sleep 15; date -u; du -sb /srv/inkdown/incoming/* 2>/dev/null || true'
