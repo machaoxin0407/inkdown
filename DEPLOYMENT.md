@@ -42,6 +42,7 @@ node scripts/check-website.mjs artifacts/site-preview
 ## 日志、失败与回滚
 
 - Actions：https://github.com/machaoxin0407/inkdown/actions/workflows/deploy-website.yml 。日志记录具体失败步骤，不打印私钥。站点部署失败时，已有 current 不变。
+- 上传长时间没有输出时，可手动运行 **Diagnose download deployment**。它使用同一部署环境，只读检查 current、磁盘空间、部署账号进程和相隔 15 秒的 incoming 大小，并将 GitHub 下载测速内容丢弃到 `/dev/null`；不修改服务器上的发行文件，也不自动重启或取消部署。持续增长表示传输仍在进行，可避免误判为卡死。
 - 服务器：`/srv/inkdown/releases/` 保存最近三个成功部署，`current` 指向在线版本。incoming 是传输暂存区；失败上传可由部署账号清理。Caddy 服务日志用 `sudo journalctl -u caddy` 查看。
 - 回滚：SSH 登录部署账号，先执行 `readlink -f /srv/inkdown/current` 与 `ls -lt /srv/inkdown/releases`，选择已验证的旧目录。执行 `ln -s /srv/inkdown/releases/所选目录 /srv/inkdown/rollback-link`，再执行 `mv -Tf /srv/inkdown/rollback-link /srv/inkdown/current`。目录名必须从列表中选择；切换后检查网页和下载。无需重启 Caddy。下一次自动部署会再次切到新版本。
 - 完整性校验测试覆盖篡改文件、路径穿越和保留版本数；上线时额外对真实服务器执行一次失败包测试，确认 current 不变。
