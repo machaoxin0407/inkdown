@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import { expect, it } from 'vitest';
+import { resourceIssues } from '../src/lib/render';
 import { reconcileMarkup } from '../src/lib/markup';
 import { readingPreferences, pdfPreferences, paperSize } from '../src/lib/preferences';
 it('reuses repeated blocks in order, updates source lines and drops removed nodes', async () => {
@@ -28,4 +29,12 @@ it('normalizes preferences and calculates oriented paper size', () => {
   });
   expect(pdfPreferences({ top: -1, right: Infinity })).toMatchObject({ top: 5, right: 15 });
   expect(paperSize(pdfPreferences({ paper: 'Letter', landscape: true }))).toEqual([279.4, 215.9]);
+});
+
+it('returns structured PDF resource problems with source positions', () => {
+  const el=document.createElement('article');
+  el.innerHTML='<p data-source-line="4"><span class="image-placeholder" data-image="missing.png" title="missing"></span></p><div data-source-line="8"><span data-math="inline" class="render-error" title="invalid formula">x</span></div><div data-source-line="12" class="diagram-source render-error">invalid diagram</div>';
+  expect(resourceIssues(el).map(({kind,line,reference})=>({kind,line,reference}))).toEqual([
+    {kind:'image',line:5,reference:'missing.png'}, {kind:'math',line:9,reference:'x'}, {kind:'diagram',line:13,reference:'invalid diagram'},
+  ]);
 });

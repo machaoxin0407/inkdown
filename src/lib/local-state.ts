@@ -47,6 +47,7 @@ export class Backups {
   >();
   private chains = new Map<string, Promise<unknown>>();
   private known = new Map<string, { content: string; path: string; fingerprint: string }>();
+  private pendingDeadlines = new Map<string, ReturnType<typeof setTimeout>>();
   private positionTimers = new Map<string, ReturnType<typeof setTimeout>>();
   positions = new Map<string, Position>();
   constructor(
@@ -57,6 +58,10 @@ export class Backups {
     const result = (this.chains.get(id) || Promise.resolve()).then(action);
     this.chains.set(id, result.catch(this.onerror));
     return result;
+  }
+  markPending(id: string, synchronize: () => void) {
+    if(this.pendingDeadlines.has(id)) return;
+    this.pendingDeadlines.set(id, setTimeout(() => { this.pendingDeadlines.delete(id); synchronize(); this.flush(id); }, 10000));
   }
   track(tab: Tab) {
     const old = this.pending.get(tab.id);
@@ -87,6 +92,7 @@ export class Backups {
       });
   }
   private flush(id: string) {
+    clearTimeout(this.pendingDeadlines.get(id)); this.pendingDeadlines.delete(id);
     const item = this.pending.get(id);
     if (!item) return;
     clearTimeout(item.timer);
@@ -110,6 +116,7 @@ export class Backups {
     });
   }
   async clear(id: string) {
+    clearTimeout(this.pendingDeadlines.get(id)); this.pendingDeadlines.delete(id);
     const item = this.pending.get(id);
     if (item) {
       clearTimeout(item.timer);

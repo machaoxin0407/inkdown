@@ -17,7 +17,7 @@ describe('Markdown rendering boundary', () => {
     );
     expect(headings.map((h) => h.id)).toEqual(['heading-0', 'heading-1']);
     expect(html).toMatch(/<table(?:\s[^>]*)?>/);
-    expect(html).toContain('type="checkbox" disabled checked');
+    expect(html).toMatch(/type="checkbox" data-task-offset="\d+" checked/);
     expect(html).toContain('data-math="inline"');
     expect(html).toContain('data-math="block"');
     expect(html).toContain('diagram-source');

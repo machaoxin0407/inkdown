@@ -7,14 +7,15 @@ const filters = [{ name: 'Markdown', extensions: ['md', 'markdown', 'mdown'] }];
 export const api = {
   relocatePosition: (oldPath: string, newPath: string) =>
     invoke<void>('relocate_position', { oldPath, newPath }),
-  watch: (workspace: string, paths: string[], generation: number) =>
-    invoke<void>('watch_paths', { workspace, paths, generation }),
+  watch: (workspace: string, paths: string[], generation: number, extraRoots: string[] = []) =>
+    invoke<void>('watch_paths', { workspace, paths, generation, extraRoots }),
+  imageBytes: (source: string) => invoke<number[]>('notebook_image_bytes', { source }),
   cancelSearch: () => invoke<void>('cancel_search'),
   search: (
     path: string,
     query: string,
     sensitive: boolean,
-    overlays: { path: string; content: string }[],
+    overlays: { path: string; content: string; sourceVersion?: string }[],
   ) =>
     invoke<{
       hits: import('./workspace').SearchHit[];
@@ -22,6 +23,8 @@ export const api = {
       truncated: boolean;
       cancelled: boolean;
     }>('search_workspace', { path, query, sensitive, overlays }),
+  searchDocument: (path: string, query: string, sensitive: boolean, overlay?: { path: string; content: string; sourceVersion: string }) =>
+    invoke<import('./workspace').SearchHit[]>('search_document', { path, query, sensitive, overlay: overlay || null }),
   create: (parent: string, name: string, directory: boolean) =>
     invoke<string>('create_entry', { parent, name, directory }),
   rename: (path: string, name: string, expected: string) =>

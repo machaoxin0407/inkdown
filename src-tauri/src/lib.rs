@@ -6,12 +6,13 @@ use tauri::{Emitter, Manager, State};
 mod pdf;
 mod local_state;
 mod workspace;
+mod notebook;
 
 #[derive(Default)]
 struct Access { documents: Mutex<HashSet<PathBuf>>, roots: Mutex<HashSet<PathBuf>>, pending: Mutex<Vec<String>> }
 #[derive(Serialize, Deserialize, Clone, Debug)]
 #[serde(rename_all = "camelCase")]
-struct Document { path: String, content: String, fingerprint: String, bom: bool, newline: String }
+struct Document { path: String, content: String, fingerprint: String, bom: bool, newline: String, byte_length: usize }
 #[derive(Serialize)]
 #[serde(rename_all = "camelCase")]
 struct Entry { name: String, path: String, directory: bool }
@@ -31,7 +32,7 @@ fn decode(path: &Path, bytes: Vec<u8>) -> Result<Document, String> {
     let text = std::str::from_utf8(if bom { &bytes[3..] } else { &bytes }).map_err(|_| "此文件不是有效 UTF-8。请先转换编码，原文件未被修改。".to_string())?;
     let crlf = text.matches("\r\n").count();
     let lf = text.matches('\n').count();
-    Ok(Document { path: display(path), content: text.replace("\r\n", "\n"), fingerprint: fingerprint(&bytes), bom, newline: if crlf > 0 && crlf * 2 >= lf { "CRLF" } else { "LF" }.into() })
+    Ok(Document { path: display(path), content: text.replace("\r\n", "\n"), fingerprint: fingerprint(&bytes), byte_length: bytes.len(), bom, newline: if crlf > 0 && crlf * 2 >= lf { "CRLF" } else { "LF" }.into() })
 }
 fn read(path: &Path) -> Result<Document, String> {
     if !markdown(path) { return Err("仅支持 .md、.markdown 和 .mdown 文件".into()); }
@@ -132,6 +133,7 @@ pub fn run() {
     tauri::Builder::default()
         .manage(Access::default())
         .manage(workspace::WorkspaceState::default())
+        .manage(notebook::NotebookState::default())
         .manage(local_state::LocalState::default())
         .plugin(tauri_plugin_single_instance::init(|app, args, cwd| {
             let paths: Vec<String> = args.into_iter().skip(1).map(|p| PathBuf::from(&cwd).join(p)).filter(|p| p.is_file() && markdown(p)).map(|p| display(&p)).collect();
@@ -146,7 +148,7 @@ pub fn run() {
             *app.state::<Access>().pending.lock().unwrap() = paths;
             Ok(())
         })
-        .invoke_handler(tauri::generate_handler![workspace::watch_paths, workspace::search_workspace, workspace::cancel_search, workspace::create_entry, workspace::rename_document, workspace::reveal_document, workspace::write_attachment, workspace::import_attachment, read_document, open_workspace, list_directory, save_document, document_fingerprint, read_image, take_open_paths, pdf::export_pdf, local_state::list_drafts, local_state::write_draft, local_state::delete_draft, local_state::read_positions, local_state::write_position, local_state::relocate_position, local_state::index_workspace, local_state::cancel_index])
+        .invoke_handler(tauri::generate_handler![notebook::notebook_open, notebook::notebook_refresh, notebook::notebook_create, notebook::notebook_style, notebook::notebook_prepare, notebook::notebook_execute, notebook::notebook_recover, notebook::notebook_attachment, notebook::notebook_import_prepare, notebook::notebook_probe_image, notebook::notebook_image_bytes, notebook::notebook_import_commit, workspace::watch_paths, workspace::search_workspace, workspace::search_document, workspace::cancel_search, workspace::create_entry, workspace::rename_document, workspace::reveal_document, workspace::write_attachment, workspace::import_attachment, read_document, open_workspace, list_directory, save_document, document_fingerprint, read_image, take_open_paths, pdf::export_pdf, local_state::list_drafts, local_state::write_draft, local_state::delete_draft, local_state::read_positions, local_state::write_position, local_state::relocate_position, local_state::index_workspace, local_state::cancel_index])
         .run(tauri::generate_context!()).expect("无法启动墨页");
 }
 

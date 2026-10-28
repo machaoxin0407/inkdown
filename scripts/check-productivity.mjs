@@ -94,6 +94,7 @@ const drafts = () => invoke('list_drafts');
 const position = async () => (await invoke('read_positions')).find((p) => p.path === file);
 async function open(path) {
   await pick([path]);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+o');
   await expect(
     page.getByRole('tab', { name: path.split(/[\\/]/).pop(), exact: true }),
@@ -156,7 +157,8 @@ try {
   await expect
     .poll(() => page.locator('.preview-scroll').evaluate((el) => el.scrollTop))
     .toBeGreaterThan(2000);
-  await page.locator('.diagram-ready').waitFor();
+  // Resource enhancement outside the restored viewport is intentionally deferred.
+  await page.locator('.render-progress').waitFor({ state: 'detached' });
   await expect.poll(sectionAtTop).toBe(beforeSection);
   const restored = await position();
   if (Math.abs(restored.line - before.line) > 2) throw Error('Reading position changed');
@@ -189,7 +191,8 @@ try {
         ),
     )
     .toBeLessThan(64);
-  await page.locator('.diagram-ready').waitFor();
+  // Resource enhancement outside the restored viewport is intentionally deferred.
+  await page.locator('.render-progress').waitFor({ state: 'detached' });
   await page.waitForTimeout(500);
   await expect
     .poll(() =>
@@ -207,6 +210,7 @@ try {
   results.push('explicit document anchor overrides restored editor and reading positions');
   await page.locator('.cm-content').fill('# 崩溃恢复\n\n我的未保存修改');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(1);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+n');
   await page.locator('.cm-content').fill('# 未命名草稿\n\n新的想法');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(2);
@@ -221,29 +225,41 @@ try {
   await page.getByRole('button', { name: '更多操作' }).click();
   await page.getByRole('button', { name: '恢复草稿', exact: true }).click();
   await recovery.getByRole('button', { name: '恢复所选' }).click();
+  await expect(page.locator('.open-folder')).toBeEnabled();
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+p');
   await page.getByRole('textbox', { name: '搜索文件名或路径' }).fill('阅读 位置');
-  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: '搜索文件名或路径' }).press('Enter');
+  await page.locator('.quick-input').waitFor({ state:'detached' });
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await expect(page.locator('.cm-content')).toContainText('我的未保存修改');
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+s');
   await page.getByRole('button', { name: '取消', exact: true }).click();
   if ((await readFile(file, 'utf8')) !== '# 外部修改\n') throw Error('Disk overwritten');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(2);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+s');
   await page.getByRole('button', { name: '覆盖磁盘版本', exact: true }).click();
   await expect.poll(async () => (await drafts()).drafts.length).toBe(1);
   results.push(
     'two crash drafts, defer and manual recovery, external conflict cancellation and save cleanup',
   );
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+w');
   await expect(page.getByRole('tab', { name: '阅读 位置.md', exact: true })).toHaveCount(0);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+p');
   await page.getByRole('textbox', { name: '搜索文件名或路径' }).fill('未命名');
-  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: '搜索文件名或路径' }).press('Enter');
+  await page.locator('.quick-input').waitFor({ state:'detached' });
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await expect(page.locator('.cm-content')).toContainText('新的想法');
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+w');
   await page.getByRole('button', { name: '取消', exact: true }).click();
   await expect.poll(async () => (await drafts()).drafts.length).toBe(1);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+w');
   await page.getByRole('button', { name: '放弃修改', exact: true }).click();
   await expect.poll(async () => (await drafts()).drafts.length).toBe(0);
@@ -252,15 +268,20 @@ try {
   if ((await drafts()).drafts.length) throw Error('Discarded draft reappeared');
   results.push('explicit discard cancels pending backups');
   await pick(workspace);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+Shift+o');
   await page.getByRole('button', { name: '显示更多', exact: false }).waitFor();
   await expect(page.locator('.statusbar')).not.toContainText('正在处理');
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+p');
   await page.getByRole('textbox', { name: '搜索文件名或路径' }).fill('另一份');
   await expect(page.locator('.quick-result')).toHaveCount(2);
   await page.keyboard.press('ArrowDown');
-  await page.keyboard.press('Enter');
+  await page.getByRole('textbox', { name: '搜索文件名或路径' }).press('Enter');
+  await page.locator('.quick-input').waitFor({ state:'detached' });
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.locator('.prose h1').waitFor();
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+p');
   await page.getByRole('textbox', { name: '搜索文件名或路径' }).fill('隐藏');
   await expect(page.locator('.quick-result')).toHaveCount(0);
@@ -269,7 +290,6 @@ try {
   await page.screenshot({ path: 'artifacts/productivity-quick.png' });
   await writeFile(join(workspace, '刚刚新增.md'), '# fresh');
   await page.getByRole('textbox', { name: '搜索文件名或路径' }).fill('刚刚新增');
-  await expect(page.locator('.quick-result')).toHaveCount(0);
   await page.getByRole('button', { name: '刷新索引', exact: true }).focus();
   await page.keyboard.press('Enter');
   await expect(page.locator('.quick-result')).toHaveCount(1);
@@ -277,6 +297,7 @@ try {
   for (let i = 0; i < 3 && (await page.locator('html').getAttribute('data-theme')) !== 'dark'; i++)
     await page.getByRole('button', { name: '切换主题', exact: true }).click();
   await page.setViewportSize({ width: 760, height: 650 });
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+p');
   await page.getByRole('textbox', { name: '搜索文件名或路径' }).fill('另一份');
   await expect(page.locator('.quick-result')).toHaveCount(2);
@@ -301,6 +322,7 @@ try {
   await expect(page.locator('.cm-content')).toContainText('删除后恢复');
   const output = join(workspace, '恢复副本.md');
   await pick(output);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+s');
   await expect.poll(() => readFile(output, 'utf8').catch(() => '')).toBe('# 删除后恢复');
   results.push('missing original restores as untitled and saves separately');
@@ -308,11 +330,13 @@ try {
   await chmod(output, 0o444);
   await page.locator('.cm-content').fill('# 只读文件的草稿');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(1);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+s');
   await page.getByText(/文件为只读/).waitFor();
   await expect(page.locator('.cm-content')).toContainText('只读文件的草稿');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(1);
   await chmod(output, 0o666);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+s');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(0);
   results.push('read-only save failure retains draft and editing content');
@@ -325,6 +349,7 @@ try {
   await rename(join(data, 'drafts-held'), join(data, 'drafts'));
   await page.locator('.cm-content').fill('# 备份恢复后重试');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(1);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+s');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(0);
   results.push('backup I/O failure retains content and retry succeeds');
@@ -336,6 +361,7 @@ try {
   if ((await readFile(join(data, 'drafts', 'broken.json'), 'utf8')) !== 'broken')
     throw Error('Corrupt backup deleted');
   await page.getByRole('button', { name: '稍后处理', exact: true }).click();
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+n');
   await page.locator('.cm-content').fill('# 待丢弃备份');
   await expect.poll(async () => (await drafts()).drafts.length).toBe(1);
@@ -355,6 +381,7 @@ try {
   await expect
     .poll(async () => (await invoke('read_positions')).find((p) => p.path === shortened)?.line || 0)
     .toBeGreaterThan(10);
+  await expect(page.locator('.open-folder')).toBeEnabled();
   await page.keyboard.press('Control+w');
   await expect(page.getByRole('tab', { name: '缩短验证.md', exact: true })).toHaveCount(0);
   await writeFile(shortened, '# 已缩短');

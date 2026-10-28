@@ -127,3 +127,20 @@ it('source positions survive reflow and clamp shortened documents', () => {
     ),
   ).toBe(100);
 });
+
+it('flushes pending editor content at the draft deadline and cancels abandoned deadlines', async () => {
+  vi.useFakeTimers();
+  const port={writeDraft:vi.fn().mockResolvedValue(undefined),deleteDraft:vi.fn().mockResolvedValue(undefined),writePosition:vi.fn().mockResolvedValue(undefined)};
+  const b=new Backups(port,vi.fn());
+  let latest=tab;
+  const synchronize=vi.fn(()=>b.track(latest));
+  b.markPending(tab.id,synchronize);
+  await vi.advanceTimersByTimeAsync(9900);
+  latest={...tab,content:'last pending input'};
+  b.track({...tab,content:'older synchronized input'});
+  await vi.advanceTimersByTimeAsync(100);
+  expect(synchronize).toHaveBeenCalledTimes(1);
+  expect(port.writeDraft.mock.calls[0][0].content).toBe('last pending input');
+  b.markPending(tab.id,synchronize);await b.clear(tab.id);await vi.advanceTimersByTimeAsync(10000);
+  expect(synchronize).toHaveBeenCalledTimes(1);
+});

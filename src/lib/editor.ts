@@ -11,7 +11,7 @@ import { markdown } from '@codemirror/lang-markdown';
 import { defaultHighlightStyle, syntaxHighlighting } from '@codemirror/language';
 import { searchKeymap, search, openSearchPanel } from '@codemirror/search';
 import type { SourceScroll } from './scroll-sync';
-const states = new Map<string, { state: EditorState; scroll: number }>();
+import { documentStates as states, liveEditors, flushers, mapInsertions } from './document-state';
 export function forgetEditor(id: string) {
   states.delete(id);
 }
@@ -23,9 +23,18 @@ export function createEditor(
   onscroll: (position: SourceScroll) => void = () => {},
   position: { cursor: number; editorLine: number } | undefined = undefined,
   onposition: (cursor: number, line: number) => void = () => {},
+  onpending: (bytes: number) => void = () => {},
 ) {
   let notify = onchange;
   let scrollFrame = 0;
+  let pending = false, bytes = new TextEncoder().encode(content).length;
+  let timer: ReturnType<typeof setTimeout> | undefined, maximum: ReturnType<typeof setTimeout> | undefined;
+  const flush = () => {
+    clearTimeout(timer); clearTimeout(maximum); maximum = undefined;
+    if (!pending) return;
+    pending = false;
+    notify(view.state.doc.toString());
+  };
   function scheduleScroll() {
     cancelAnimationFrame(scrollFrame);
     scrollFrame = requestAnimationFrame(() => {
@@ -72,7 +81,17 @@ export function createEditor(
       '.cm-panels': { backgroundColor: 'var(--surface)', color: 'var(--text)' },
     }),
     EditorView.updateListener.of((update) => {
-      if (update.docChanged) notify(update.state.doc.toString());
+      if (update.docChanged) {
+        mapInsertions(id, update.changes);
+        update.changes.iterChanges((from, to, _a, _b, insert) => {
+          bytes += new TextEncoder().encode(insert.toString()).length - new TextEncoder().encode(update.startState.sliceDoc(from, to)).length;
+        });
+        pending = true;
+        onpending(bytes);
+        clearTimeout(timer);
+        timer = setTimeout(flush, 100);
+        maximum ??= setTimeout(flush, 250);
+      }
       // Selection changes arrive inside CodeMirror's DOM update. Defer geometry
       // reads to the shared animation frame instead of forcing layout there.
       if (update.docChanged || update.geometryChanged || update.selectionSet) scheduleScroll();
@@ -88,6 +107,8 @@ export function createEditor(
     state = state.update({ effects: reconfigure.of(extensions) }).state;
   }
   const view = new EditorView({ state, parent: host });
+  liveEditors.set(id, view);
+  flushers.set(id, flush);
   view.scrollDOM.addEventListener('scroll', scheduleScroll, { passive: true });
   if (stored && stored.state.doc.toString() === content) view.scrollDOM.scrollTop = stored.scroll;
   else if (position) {
@@ -102,6 +123,7 @@ export function createEditor(
   }
   scheduleScroll();
   return {
+    flush,
     focus: () => view.focus(),
     find: () => openSearchPanel(view),
     select(from: number, to: number) {
@@ -127,6 +149,9 @@ export function createEditor(
       view.requestMeasure();
     },
     destroy() {
+      flush();
+      flushers.delete(id);
+      liveEditors.delete(id);
       states.set(id, { state: view.state, scroll: view.scrollDOM.scrollTop });
       notify = () => {};
       cancelAnimationFrame(scrollFrame);

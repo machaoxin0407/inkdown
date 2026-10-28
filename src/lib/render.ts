@@ -1,63 +1,65 @@
 import DOMPurify from 'dompurify';
 import { api, desktop } from './api';
 import type { Heading } from './types';
-type Parsed = { html: string; headings: Heading[]; blocks?: { line: number; end: number }[] };
-type Job = {
-  id: number;
-  owner: string;
-  source: string;
-  resolve: (result: Parsed) => void;
-  reject: (e: Error) => void;
-};
-let worker: Worker | undefined,
-  active: Job | undefined,
-  seq = 0;
-const queued = new Map<string, Job>();
-function pump() {
-  if (active || !queued.size) return;
-  if (!worker) {
-    worker = new Worker(new URL('./parse.worker.ts', import.meta.url), { type: 'module' });
-    worker.onmessage = ({ data }) => {
-      const job = active;
-      active = undefined;
-      if (job && job.id === data.id) {
-        if (data.error) job.reject(new Error(data.error));
-        else
-          job.resolve({
-            ...data,
-            html: DOMPurify.sanitize(data.html, {
-              ADD_ATTR: ['data-math', 'data-image', 'data-alt'],
-              FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'form'],
-            }),
-          });
-      }
-      pump();
-    };
-    worker.onerror = () => {
-      const error = new Error('渲染进程出错，请重试');
-      active?.reject(error);
-      active = undefined;
-      queued.forEach((job) => job.reject(error));
-      queued.clear();
-      worker?.terminate();
-      worker = undefined;
-    };
-  }
-  active = queued.values().next().value!;
-  queued.delete(active.owner);
-  worker.postMessage({ id: active.id, source: active.source });
-}
-export function cancelParse(owner: string) {
-  queued.get(owner)?.reject(new DOMException('已取消', 'AbortError'));
-  queued.delete(owner);
-  if (active?.owner === owner) active.reject(new DOMException('已取消', 'AbortError'));
-}
-export function parse(source: string, owner = 'export-' + ++seq): Promise<Parsed> {
-  queued.get(owner)?.reject(new DOMException('已取消', 'AbortError'));
-  return new Promise((resolve, reject) => {
-    queued.set(owner, { id: ++seq, owner, source, resolve, reject });
-    pump();
+export type Parsed = { html: string; markup: string[]; headings: Heading[]; blocks?: { line: number; end: number }[] };
+export function sanitizeMarkup(html: string) {
+  return DOMPurify.sanitize(html, {
+    ADD_ATTR: ['data-math', 'data-image', 'data-alt', 'data-task-offset'],
+    FORBID_TAGS: ['style', 'script', 'iframe', 'object', 'form'],
   });
+}
+type Job = { id: number; owner: string; source: string; resolve: (p: Parsed) => void; reject: (e: Error) => void };
+class ParserLane {
+  private worker?: Worker;
+  private active?: Job;
+  private queued = new Map<string, Job>();
+  private seq = 0;
+  cancel(owner: string) {
+    const error = new DOMException('已取消', 'AbortError');
+    this.queued.get(owner)?.reject(error); this.queued.delete(owner);
+    if (this.active?.owner === owner) {
+      this.active.reject(error); this.active = undefined;
+      this.worker?.terminate(); this.worker = undefined;
+      this.pump();
+    }
+  }
+  parse(source: string, owner: string): Promise<Parsed> {
+    this.cancel(owner);
+    return new Promise((resolve, reject) => {
+      this.queued.set(owner, { id: ++this.seq, owner, source, resolve, reject }); this.pump();
+    });
+  }
+  private pump() {
+    if (this.active || !this.queued.size) return;
+    if (!this.worker) {
+      const worker = new Worker(new URL('./parse.worker.ts', import.meta.url), { type: 'module' });
+      this.worker = worker;
+      worker.onmessage = ({ data }) => {
+        if (worker !== this.worker) return;
+        const job = this.active; this.active = undefined;
+        if (job && job.id === data.id) {
+          if (data.error) job.reject(new Error(data.error)); else job.resolve(data);
+        }
+        this.pump();
+      };
+      worker.onerror = () => {
+        if (worker !== this.worker) return;
+        const error = new Error('渲染进程出错，请重试');
+        this.active?.reject(error); this.active = undefined;
+        this.queued.forEach((j) => j.reject(error)); this.queued.clear();
+        worker.terminate(); this.worker = undefined;
+      };
+    }
+    this.active = this.queued.values().next().value!;
+    this.queued.delete(this.active.owner);
+    this.worker.postMessage({ id: this.active.id, source: this.active.source });
+  }
+}
+const previewParser = new ParserLane(), exportParser = new ParserLane();
+let exportId = 0;
+export const cancelParse = (owner: string) => previewParser.cancel(owner);
+export function parse(source: string, owner?: string): Promise<Parsed> {
+  return owner ? previewParser.parse(source, owner) : exportParser.parse(source, 'export-' + ++exportId);
 }
 const imageCache = new Map<string, string>();
 let imageBytes = 0;
@@ -118,14 +120,14 @@ export function clearRenderCaches() {
 }
 let mermaidQueue: Promise<void> = Promise.resolve();
 let diagramId = 0;
-export async function enhance(
+async function enhanceContent(
   container: HTMLElement,
   path: string,
   dark: boolean,
   valid: () => boolean,
   eager = false,
 ) {
-  const maths = [...container.querySelectorAll<HTMLElement>('[data-math]:not([data-enhanced])')];
+  const maths = select(container, '[data-math]:not([data-enhanced])');
   if (maths.length) {
     const [{ default: katex }] = await Promise.all([
       import('katex'),
@@ -152,7 +154,7 @@ export async function enhance(
     }
   }
   disposeEnhancements(container);
-  const images = [...container.querySelectorAll<HTMLElement>('[data-image]:not([data-enhanced])')];
+  const images = select(container, '[data-image]:not([data-enhanced])');
   async function loadImage(el: HTMLElement) {
     if (!valid() || !desktop || !path || el.dataset.enhanced) return;
     try {
@@ -189,7 +191,7 @@ export async function enhance(
     imageObservers.set(container, observer);
     images.forEach((el) => observer.observe(el));
   }
-  const diagrams = [...container.querySelectorAll<HTMLElement>('.diagram-source')].filter(
+  const diagrams = select(container, '.diagram-source').filter(
     (el) => el.dataset.theme !== String(dark),
   );
   if (diagrams.length) {
@@ -258,4 +260,35 @@ export async function enhance(
     mermaidQueue = mermaidQueue.then(work, work);
     await mermaidQueue;
   }
+}
+
+function select(container: HTMLElement, selector: string): HTMLElement[] {
+  return [...(container.matches(selector) ? [container] : []), ...container.querySelectorAll<HTMLElement>(selector)];
+}
+export interface ResourceIssue { kind: 'image' | 'math' | 'diagram'; line: number; reference: string; message: string }
+export function resourceIssues(container: HTMLElement): ResourceIssue[] {
+  return [...container.querySelectorAll<HTMLElement>('.render-error,.image-placeholder')].map((el) => ({
+    kind: el.matches('[data-image],.image-placeholder') ? 'image' : el.matches('[data-math]') ? 'math' : 'diagram',
+    line: Number(el.closest('[data-source-line]')?.getAttribute('data-source-line') || 0) + 1,
+    reference: el.dataset.image || el.dataset.source || el.textContent || '',
+    message: el.title || (el.matches('.image-placeholder') ? el.textContent || '图片未加载' : '图表语法错误'),
+  }));
+}
+export async function enhance(container: HTMLElement, path: string, dark: boolean, valid: () => boolean, eager = false): Promise<ResourceIssue[]> {
+  disposeEnhancements(container);
+  if (eager) {
+    await enhanceContent(container, path, dark, valid, true);
+    return resourceIssues(container);
+  }
+  const pending = select(container, '[data-math]:not([data-enhanced]),[data-image]:not([data-enhanced]),.diagram-source').filter((el) => !el.matches('.diagram-source') || el.dataset.theme !== String(dark));
+  let chain = Promise.resolve();
+  const observer = new IntersectionObserver((entries) => {
+    for (const entry of entries) if (entry.isIntersecting) {
+      observer.unobserve(entry.target);
+      chain = chain.then(async () => { if (valid()) await enhanceContent(entry.target as HTMLElement, path, dark, valid, true); });
+    }
+  }, { root: container.closest('.preview-scroll'), rootMargin: '600px' });
+  imageObservers.set(container, observer);
+  pending.forEach((el) => observer.observe(el));
+  return [];
 }

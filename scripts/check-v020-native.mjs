@@ -117,12 +117,14 @@ try {
   });
   await check('workspace search includes disk and unsaved overlays', async () => {
     await page.getByRole('button', { name: '测试.md', exact: true }).first().click();
-    await page.keyboard.press('Control+e');
+    await expect(page.locator('.open-folder')).toBeEnabled();
+    await page.getByRole('button', { name: '编辑', exact: true }).click();
     await page.locator('.cm-content').fill('# 未保存搜索词');
     await page.keyboard.press('Control+Shift+f');
     await page.getByLabel('搜索工作区正文', { exact: true }).fill('未保存搜索词');
     await expect(page.locator('.workspace-hit')).toHaveCount(1);
     await page.locator('.workspace-hit').click();
+    await expect(page.locator('.open-folder')).toBeEnabled();
     await expect(page.locator('.cm-content')).toHaveText('# 未保存搜索词');
     const result = await invoke('search_workspace', {
       path: workspace,
@@ -160,7 +162,8 @@ try {
     results.push({
       name: 'warm quick open timings',
       values,
-      p95: Math.max(...values),
+      median: [...values].sort((a,b)=>a-b)[Math.floor(values.length/2)],
+      maximum: Math.max(...values),
       passed: Math.max(...values) <= 100,
     });
   });
@@ -173,6 +176,8 @@ try {
     await row.getByRole('button', { name: '重命名', exact: true }).click();
     await page.getByLabel('文件名', { exact: true }).fill('改名.md');
     await page.getByRole('button', { name: '确定', exact: true }).click();
+    await page.getByRole('button', { name: '仅重命名', exact: true }).click();
+    await page.getByRole('button', { name: '关闭重命名预览', exact: true }).click();
     await expect(page.getByRole('tab', { name: '改名.md', exact: true })).toBeVisible();
     expect(await readFile(join(workspace, '改名.md'), 'utf8')).toContain('未保存搜索词');
     const path = await invoke('create_entry', {
@@ -219,6 +224,7 @@ try {
     const output = join(root, 'letter.pdf');
     await pick(output);
     await page.keyboard.press('Control+Shift+p');
+    await page.getByRole('button', { name: /^(确认导出|仍然导出)$/ }).click();
     await expect(page.locator('.toast')).toContainText('PDF 已导出');
     expect((await readFile(output)).subarray(0, 5).toString()).toBe('%PDF-');
     results.push({ name: 'PDF output', path: output, passed: true });

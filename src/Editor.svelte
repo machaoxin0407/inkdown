@@ -2,16 +2,18 @@
   import { onMount } from 'svelte';
   import type { SourceScroll } from './lib/scroll-sync';
   export let id: string;
-  export let onpasteimage: (file: File) => void = () => {};
+  export let onpasteimage: (file: File) => Promise<unknown> | void = () => {};
   export let content: string;
   export let zoom = 100;
   export let position: { cursor: number; editorLine: number } | undefined = undefined;
   export let onposition: (cursor: number, line: number) => void = () => {};
-  export let onchange: (value: string) => void;
+  export let onpending: (bytes: number, owner: string) => void = () => {};
+  export let onchange: (value: string, owner: string) => void;
   export let onscroll: (position: SourceScroll) => void;
   let host: HTMLDivElement;
   let editor: ReturnType<typeof import('./lib/editor').createEditor> | undefined;
   $: editor?.setZoom(zoom);
+  export function flush() { editor?.flush(); }
   export function find() {
     editor?.find();
   }
@@ -27,7 +29,7 @@
     let cancelled = false;
     import('./lib/editor').then(({ createEditor }) => {
       if (cancelled) return;
-      editor = createEditor(host, id, content, onchange, onscroll, position, onposition);
+      editor = createEditor(host, id, content, (value) => onchange(value, id), onscroll, position, onposition, (bytes) => onpending(bytes, id));
       editor.focus();
     });
     return () => {
@@ -39,7 +41,14 @@
 
 <div
   class="editor-host"
+  role="region"
+  aria-label="Markdown 编辑器"
   bind:this={host}
+  on:dragover={(event) => { if ([...(event.dataTransfer?.items || [])].some(i => i.type.startsWith('image/'))) event.preventDefault(); }}
+  on:drop={async (event) => {
+    const files = [...(event.dataTransfer?.files || [])].filter(file => file.type.startsWith('image/'));
+    if (files.length) { event.preventDefault(); event.stopPropagation(); for (const file of files) await onpasteimage(file); }
+  }}
   on:paste={(event) => {
     const file = [...(event.clipboardData?.files || [])].find((file) =>
       file.type.startsWith('image/'),

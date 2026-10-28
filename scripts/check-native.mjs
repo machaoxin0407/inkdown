@@ -175,6 +175,7 @@ await check('invalid UTF8 reports error without opening', async () => {
 });
 await check('offline formulas diagrams local images', async () => {
   await open(resolve('examples/欢迎使用.md'));
+  await page.locator('.diagram-source').scrollIntoViewIfNeeded();
   await page.locator('.diagram-ready svg').waitFor();
   await page.locator('.local-image').scrollIntoViewIfNeeded();
   await page.locator('.local-image img').waitFor();
@@ -191,7 +192,8 @@ await check('offline formulas diagrams local images', async () => {
   try {
     await context.setOffline(true);
     await page.reload();
-    await page.locator('.diagram-ready svg').waitFor();
+    await page.locator('.diagram-source').scrollIntoViewIfNeeded();
+  await page.locator('.diagram-ready svg').waitFor();
     if (requests.length) throw Error('Network requests: ' + requests);
   } finally {
     await context.setOffline(false);

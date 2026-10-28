@@ -1,4 +1,4 @@
-import { chromium } from '@playwright/test';
+import { chromium, expect } from '@playwright/test';
 import { mkdir, writeFile } from 'node:fs/promises';
 await mkdir('artifacts', { recursive: true });
 const browser = await chromium.launch({ channel: 'chrome', headless: true });
@@ -23,6 +23,7 @@ async function check(name, fn) {
 }
 await page.goto('http://127.0.0.1:1420');
 await page.locator('.prose h1').waitFor();
+await page.locator('.diagram-source').first().scrollIntoViewIfNeeded();
 await page.locator('.diagram-ready svg').waitFor({ timeout: 60000 });
 await check('offline enhancements', async () => {
   if ((await page.locator('.katex').count()) !== 2) throw Error('Missing formulas');
@@ -39,7 +40,7 @@ await check('reading find', async () => {
   await page.keyboard.press('Control+f');
   await page.getByRole('textbox', { name: '在文档中查找' }).fill('文档');
   await page.getByRole('textbox', { name: '在文档中查找' }).press('Enter');
-  if ((await page.locator('mark.search-hit').count()) < 2) throw Error('Missing search hits');
+  await expect.poll(() => page.locator('mark.search-hit').count()).toBeGreaterThanOrEqual(2);
   await page.getByRole('button', { name: '关闭查找' }).click();
 });
 await check('source edit and live preview', async () => {

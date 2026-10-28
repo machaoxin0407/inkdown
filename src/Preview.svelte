@@ -13,6 +13,8 @@
     type ScrollAnchor,
   } from './lib/scroll-sync';
   export let content: string;
+  export let stale = false;
+  export let ontask: (offset: number, checked: boolean, source: string) => void = () => {};
   export let reading: ReadingPreferences = readingDefaults;
   export let path = '';
   export let dark = false;
@@ -24,6 +26,7 @@
   export let onerror: (error: unknown) => void = () => {};
   let restoring = true;
   let reloadedLocation: SourceScroll | undefined;
+  export function positionNow(position: SourceScroll) { restoring = false; host.scrollTop = previewScrollTop(position, scrollAnchors, host.scrollHeight - host.clientHeight); }
   export function restorePosition(position: SourceScroll) {
     reloadedLocation = position;
   }
@@ -67,6 +70,7 @@
   }
   export let onscroll: (position: number) => void;
   export let onheadings: (headings: Heading[]) => void;
+  export let onanchor: (name: string) => void = (name) => anchor(name);
   export let onlink: (href: string) => void;
   let host: HTMLDivElement;
   let article: HTMLElement;
@@ -228,6 +232,7 @@
   }
   function schedule(source: string, file: string, isDark: boolean) {
     const token = ++generation;
+    cancelParse(owner);
     clearTimeout(timer);
     timer = setTimeout(
       async () => {
@@ -238,7 +243,7 @@
           if (token !== generation || !article) return;
           const position = initial ? scroll : host.scrollTop;
           clearMarks();
-          await reconcileMarkup(article, parsed.html, () => token === generation);
+          await reconcileMarkup(article, parsed.markup, () => token === generation);
           if (token !== generation) return;
           addCopyButtons();
           renderedSource = source;
@@ -280,11 +285,18 @@
     clearTimeout(searchTimer);
   });
   function click(event: MouseEvent) {
+    const task = (event.target as Element).closest<HTMLInputElement>('input[data-task-offset]');
+    if (task) {
+      event.preventDefault();
+      if (!stale && renderedSource === content) ontask(Number(task.dataset.taskOffset), content[Number(task.dataset.taskOffset) + 1] === ' ', content);
+      return;
+    }
+    if (stale) { event.preventDefault(); return; }
     const link = (event.target as Element).closest('a');
     if (!link) return;
     event.preventDefault();
     const href = link.getAttribute('href');
-    if (href?.startsWith('#')) anchor(decodeURIComponent(href.slice(1)));
+    if (href?.startsWith('#')) onanchor(decodeURIComponent(href.slice(1)));
     else if (href) onlink(href);
   }
 </script>
@@ -335,6 +347,7 @@
   <!-- svelte-ignore a11y_click_events_have_key_events -->
   <div
     class="preview-scroll"
+    class:preview-stale={stale}
     bind:this={host}
     on:wheel={userScroll}
     on:pointerdown={userScroll}

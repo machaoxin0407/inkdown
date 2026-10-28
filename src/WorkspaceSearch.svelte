@@ -2,9 +2,12 @@
   import { onDestroy } from 'svelte';
   import { api, desktop } from './lib/api';
   import type { Tab } from './lib/types';
+  import { sourceVersion, dirty } from './lib/types';
   import type { SearchHit } from './lib/workspace';
   export let workspace: string;
   export let tabs: Tab[];
+  export let revision = 0;
+  export let beforeSearch: () => void = () => {};
   export let onopen: (hit: SearchHit) => void;
   let query = '',
     sensitive = false,
@@ -17,6 +20,8 @@
   function schedule() {
     clearTimeout(timer);
     const id = ++token;
+    hits = [];
+    message = '';
     if (desktop) void api.cancelSearch();
     if (!query || !workspace) {
       hits = [];
@@ -27,11 +32,12 @@
     loading = true;
     timer = setTimeout(async () => {
       try {
+        beforeSearch();
         const result = await api.search(
           workspace,
           query,
           sensitive,
-          tabs.filter((t) => t.path).map((t) => ({ path: t.path, content: t.content })),
+          tabs.filter((t) => t.path && dirty(t)).map((t) => ({ path: t.path, content: t.content, sourceVersion: sourceVersion(t) })),
         );
         if (id !== token) return;
         if (!result.cancelled) hits = result.hits;
@@ -45,6 +51,7 @@
   }
   $: {
     workspace;
+    revision;
     schedule();
   }
   onDestroy(() => {

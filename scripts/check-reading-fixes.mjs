@@ -76,6 +76,7 @@ try {
         await page.getByRole('button', { name: '切换主题', exact: true }).click();
       await page.waitForTimeout(250);
       await page.waitForFunction(() => !document.querySelector('.render-progress'));
+      await page.locator('.diagram-source').scrollIntoViewIfNeeded();
       await expect(page.locator('.diagram-ready svg text')).not.toHaveCount(0);
       const text = await page.locator('.diagram-ready svg text').allTextContents();
       for (const label of ['开始阅读', '编辑文档', '同步预览', '下一步'])

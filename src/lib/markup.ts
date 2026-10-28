@@ -1,17 +1,26 @@
+import { sanitizeMarkup } from './render';
 const originals = new WeakMap<Node, string>();
 const key = (html: string) => html.replace(/ data-source-line="\d+"/g, '');
 /** Monotonic reuse: repeated blocks retain their document order. */
-export async function reconcileMarkup(target: HTMLElement, html: string, valid: () => boolean) {
-  if (!target.children.length) {
-    if (valid()) {
-      target.innerHTML = html;
-      for (const node of target.children) originals.set(node, key(node.outerHTML));
-    }
-    return;
+export async function reconcileMarkup(target: HTMLElement, html: string | string[], valid: () => boolean) {
+  const incoming: Element[] = [];
+  let prepared = performance.now();
+  const batches: string[] = [];
+  let batch = '';
+  for (const chunk of typeof html === 'string' ? [html] : html) {
+    if (batch.length + chunk.length > 65536 && batch) { batches.push(batch); batch = ''; }
+    batch += chunk;
   }
-  const template = document.createElement('template');
-  template.innerHTML = html;
-  const incoming = [...template.content.children];
+  if(batch) batches.push(batch);
+  for (const chunk of batches) {
+    if (!valid()) return;
+    const template = document.createElement('template');
+    template.innerHTML = sanitizeMarkup(chunk);
+    incoming.push(...template.content.children);
+    if (performance.now() - prepared > 8) {
+      await new Promise<void>((r) => requestAnimationFrame(() => r())); prepared = performance.now();
+    }
+  }
   const old = [...target.children];
   const byKey = new Map<string, { node: Element; index: number }[]>();
   old.forEach((node, index) => {

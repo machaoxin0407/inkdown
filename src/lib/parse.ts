@@ -108,6 +108,8 @@ md.renderer.rules.image = (tokens, i) => {
   return `<span class="local-image" data-image="${escape(src)}" data-alt="${escape(alt)}">图片 · ${escape(alt || src)}</span>`;
 };
 md.core.ruler.after('inline', 'tasks', (state) => {
+  const lineStarts = [0];
+  for (let at = state.src.indexOf('\n'); at >= 0; at = state.src.indexOf('\n', at + 1)) lineStarts.push(at + 1);
   state.tokens.forEach((token, i) => {
     if (
       token.type !== 'inline' ||
@@ -120,11 +122,15 @@ md.core.ruler.after('inline', 'tasks', (state) => {
     const checked = first.content[1].toLowerCase() === 'x';
     first.content = first.content.slice(4);
     const input = new state.Token('html_inline', '', 0);
-    input.content = `<input type="checkbox" disabled ${checked ? 'checked' : ''} aria-label="任务${checked ? '已完成' : '未完成'}"/>`;
+    const line = state.tokens[i - 2]?.map?.[0];
+    const start = line === undefined ? -1 : lineStarts[line];
+    const marker = start < 0 ? null : /(?:^|[>\s])(?:[-+*]|\d+[.)])\s+(\[[ xX]\])/.exec(state.src.slice(start, state.src.indexOf('\n', start) < 0 ? undefined : state.src.indexOf('\n', start)));
+    const offset = marker ? start + marker.index + marker[0].lastIndexOf(marker[1]) : -1;
+    input.content = `<input type="checkbox" ${offset < 0 ? 'disabled' : `data-task-offset="${offset}"`} ${checked ? 'checked' : ''} aria-label="任务${checked ? '已完成' : '未完成'}"/>`;
     token.children!.unshift(input);
   });
 });
-export function parseMarkdown(source: string): { html: string; headings: Heading[]; blocks: {line: number; end: number}[] } {
+export function parseMarkdown(source: string, chunksOnly = false): { html: string; markup: string[]; headings: Heading[]; blocks: {line: number; end: number}[] } {
   const env = {},
     tokens = md.parse(source, env),
     headings: Heading[] = [];
@@ -146,5 +152,14 @@ export function parseMarkdown(source: string): { html: string; headings: Heading
       });
     }
   }
-  return { html: md.renderer.render(tokens, md.options, env), headings, blocks: tokens.filter(t => t.map && t.level === 0 && t.type !== 'inline').map(t => ({line: t.map![0], end: t.map![1]})) };
+  const markup: string[] = [];
+  let first = 0;
+  for (let i = 0; i < tokens.length; i++) {
+    if (tokens[i].level === 0 && tokens[i].nesting !== 1) {
+      markup.push(md.renderer.render(tokens.slice(first, i + 1), md.options, env));
+      first = i + 1;
+    }
+  }
+  if (first < tokens.length) markup.push(md.renderer.render(tokens.slice(first), md.options, env));
+  return { html: chunksOnly ? '' : markup.join(''), markup, headings, blocks: tokens.filter(t => t.map && t.level === 0 && t.type !== 'inline').map(t => ({line: t.map![0], end: t.map![1]})) };
 }

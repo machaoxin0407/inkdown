@@ -66,6 +66,7 @@ try {
     await expect(page.locator('.open-folder')).toBeEnabled();
     await page.evaluate((p) => window.__pdfPaths.push(p), path);
     await page.keyboard.press('Control+Shift+p');
+    await page.getByRole('button', { name: /^(确认导出|仍然导出)$/ }).click();
     await expect.poll(async () => (await readFile(path).catch(() => Buffer.alloc(0))).subarray(0,5).toString()).toBe('%PDF-');
     await expect(page.locator('.open-folder')).toBeEnabled();
     await expect(page.locator('.pdf-export-root')).toHaveCount(0);
@@ -86,6 +87,7 @@ try {
   await expect(page.locator('.open-folder')).toBeEnabled();
   await page.evaluate(() => window.__pdfPaths.push(null));
   await page.keyboard.press('Control+Shift+p');
+  await page.getByRole('button', { name: /^(确认导出|仍然导出)$/ }).click();
   await page.waitForFunction(() => window.__pdfPaths.length === 0);
   await expect(page.locator('.open-folder')).toBeEnabled();
   await expect(page.locator('.pdf-export-root')).toHaveCount(0);
@@ -94,6 +96,7 @@ try {
   try {
     await page.evaluate((p) => window.__pdfPaths.push(p), edited);
     await page.keyboard.press('Control+Shift+p');
+    await page.getByRole('button', { name: /^(确认导出|仍然导出)$/ }).click();
     await page.getByText(/目标 PDF 为只读/).waitFor();
     await expect(page.locator('.pdf-export-root')).toHaveCount(0);
     results.push('read-only PDF fails safely and cleans up');
